@@ -1,3 +1,5 @@
+import 'package:alarms_oss/src/core/theme/app_theme.dart';
+import 'package:alarms_oss/src/core/ui/neo_brutal_widgets.dart';
 import 'package:alarms_oss/src/features/alarms/application/active_alarm_session_controller.dart';
 import 'package:alarms_oss/src/features/alarms/domain/active_alarm_session.dart';
 import 'package:flutter/material.dart';
@@ -21,92 +23,98 @@ class ActiveAlarmScreen extends ConsumerWidget {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        body: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF14080E), Color(0xFF5A1420), Color(0xFFC44536)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+        backgroundColor: NeoColors.primary,
+        body: Stack(
+          children: [
+            Positioned(
+              top: 90,
+              left: -24,
+              child: Text(
+                'Z',
+                style: theme.textTheme.displayLarge?.copyWith(
+                  color: NeoColors.ink.withValues(alpha: 0.08),
+                  fontSize: 160,
+                ),
+              ),
             ),
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0x26FFFFFF),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const Text(
-                      'Alarm ringing',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    formattedTime,
+            Positioned(
+              right: -16,
+              bottom: 110,
+              child: Transform.rotate(
+                angle: 0.18,
+                child: Container(
+                  width: 170,
+                  height: 170,
+                  color: NeoColors.ink.withValues(alpha: 0.05),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'Z',
                     style: theme.textTheme.displayLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -3,
-                      height: 0.92,
+                      color: NeoColors.ink.withValues(alpha: 0.09),
+                      fontSize: 120,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    session.alarmLabel,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Native audio, vibration, and the foreground service are active. Mission enforcement is the next layer on top of this ring session.',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFFF7D8D4),
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  _AlarmSessionStat(
-                    label: 'Mission',
-                    value: session.missionType == 'none'
-                        ? 'Direct dismiss'
-                        : session.missionType,
-                  ),
-                  const SizedBox(height: 12),
-                  _AlarmSessionStat(
-                    label: 'Started',
-                    value: localizations.formatFullDate(session.startedAtLocal),
-                  ),
-                  const SizedBox(height: 12),
-                  _AlarmSessionStat(
-                    label: 'Snooze budget',
-                    value: '${session.snoozeCount}/${session.maxSnoozes}',
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFFFF4EA),
-                        foregroundColor: const Color(0xFF311012),
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        textStyle: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const NeoPanel(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          borderWidth: 2,
+                          shadowOffset: Offset(3, 3),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.alarm, size: 18),
+                              SizedBox(width: 8),
+                              Text('ACTIVE ALARM'),
+                            ],
+                          ),
                         ),
+                        const Spacer(),
+                        const NeoPanel(
+                          padding: EdgeInsets.all(9),
+                          borderWidth: 2,
+                          shadowOffset: Offset(3, 3),
+                          child: Icon(Icons.battery_charging_full, size: 22),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    const NeoPill(
+                      label: 'Alarm ringing',
+                      backgroundColor: NeoColors.orange,
+                    ),
+                    const SizedBox(height: 22),
+                    Text(
+                      formattedTime,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.displayLarge?.copyWith(
+                        fontSize: MediaQuery.sizeOf(context).width > 420
+                            ? 110
+                            : 74,
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      session.alarmLabel.toUpperCase(),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineLarge,
+                    ),
+                    const SizedBox(height: 28),
+                    NeoActionButton(
+                      label: 'Dismiss',
+                      expand: true,
+                      backgroundColor: NeoColors.panel,
                       onPressed: () async {
                         try {
                           await ref
@@ -124,49 +132,70 @@ class ActiveAlarmScreen extends ConsumerWidget {
                           );
                         }
                       },
-                      child: const Text('Dismiss alarm'),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    const NeoActionButton(
+                      label: 'Snooze (next sprint)',
+                      expand: true,
+                      backgroundColor: NeoColors.warm,
+                    ),
+                    const Spacer(),
+                    NeoPanel(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            color: NeoColors.cyan,
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.calculate),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Active mission',
+                                  style: theme.textTheme.labelMedium,
+                                ),
+                                Text(
+                                  session.missionType == 'none'
+                                      ? 'DIRECT DISMISS'
+                                      : session.missionType.toUpperCase(),
+                                  style: theme.textTheme.titleLarge,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${localizations.formatFullDate(session.startedAtLocal)}  |  Snooze ${session.snoozeCount}/${session.maxSnoozes}',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: NeoColors.ink,
+                                width: 2,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: const Text('!'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
-    );
-  }
-}
-
-class _AlarmSessionStat extends StatelessWidget {
-  const _AlarmSessionStat({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 104,
-          child: Text(
-            label,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: const Color(0xFFF7D8D4),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: theme.textTheme.bodyLarge?.copyWith(color: Colors.white),
-          ),
-        ),
-      ],
     );
   }
 }

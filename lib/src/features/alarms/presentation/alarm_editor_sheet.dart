@@ -1,3 +1,5 @@
+import 'package:alarms_oss/src/core/theme/app_theme.dart';
+import 'package:alarms_oss/src/core/ui/neo_brutal_widgets.dart';
 import 'package:alarms_oss/src/features/alarms/domain/alarm_engine_status.dart';
 import 'package:alarms_oss/src/features/alarms/domain/alarm_spec.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +18,8 @@ class AlarmEditorSheet extends StatefulWidget {
     return showModalBottomSheet<AlarmSpec>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (context) =>
           AlarmEditorSheet(alarm: alarm, engineStatus: engineStatus),
     );
@@ -63,220 +66,275 @@ class _AlarmEditorSheetState extends State<AlarmEditorSheet> {
     final theme = Theme.of(context);
     final mediaQuery = MediaQuery.of(context);
     final diagnostics = widget.engineStatus;
+    final amPmLabel = _time.period == DayPeriod.am ? 'AM' : 'PM';
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        0,
-        20,
-        20 + mediaQuery.viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Alarm details',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
+    return FractionallySizedBox(
+      heightFactor: 0.96,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          12,
+          0,
+          12,
+          12 + mediaQuery.viewInsets.bottom,
+        ),
+        child: NeoPanel(
+          padding: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                child: Row(
+                  children: [
+                    NeoSquareIconButton(
+                      icon: Icons.close,
+                      size: 42,
+                      onPressed: () {
+                        Navigator.of(context).maybePop();
+                      },
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        widget.alarm.nextTriggerAtUtc == null
+                            ? 'NEW ALARM'
+                            : 'EDIT ALARM',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleLarge,
+                      ),
+                    ),
+                    const SizedBox(width: 42),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Sprint 4 turns the editor into a real configuration surface with device-aware diagnostics.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF56483A),
-                height: 1.4,
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                decoration: const BoxDecoration(
+                  color: Color(0x22FFFF00),
+                  border: Border(
+                    top: BorderSide(color: NeoColors.ink, width: 3),
+                    bottom: BorderSide(color: NeoColors.ink, width: 3),
+                  ),
+                ),
+                child: InkWell(
+                  onTap: _pickTime,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _TimeBlock(
+                        label: _time.hourOfPeriod.toString().padLeft(2, '0'),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(':', style: theme.textTheme.displayMedium),
+                      ),
+                      _TimeBlock(
+                        label: _time.minute.toString().padLeft(2, '0'),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        children: [
+                          _PeriodChip(label: 'AM', active: amPmLabel == 'AM'),
+                          const SizedBox(height: 8),
+                          _PeriodChip(label: 'PM', active: amPmLabel == 'PM'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            if (diagnostics != null && !diagnostics.canScheduleExactAlarms) ...[
-              const SizedBox(height: 16),
-              const _EditorWarning(
-                title: 'Exact alarms are not ready',
-                detail:
-                    'You can still save the alarm, but enabling it will fail until exact-alarm access is available.',
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (diagnostics != null &&
+                          !diagnostics.canScheduleExactAlarms) ...[
+                        const _EditorWarning(
+                          title: 'Exact alarms are not ready',
+                          detail:
+                              'You can still save the alarm, but enabling it will fail until exact-alarm access is available.',
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      Text('LABEL', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _labelController,
+                        decoration: const InputDecoration(
+                          hintText: 'Wake up call',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text('REPEAT', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: AlarmWeekday.values
+                            .map(
+                              (weekday) => NeoDayChip(
+                                label: weekday.shortLabel.substring(0, 1),
+                                selected: _selectedWeekdays.contains(weekday),
+                                onTap: () {
+                                  setState(() {
+                                    if (_selectedWeekdays.contains(weekday)) {
+                                      _selectedWeekdays.remove(weekday);
+                                    } else {
+                                      _selectedWeekdays.add(weekday);
+                                    }
+                                  });
+                                },
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 18),
+                      _EditorSelector(
+                        title: 'RINGTONE',
+                        child: DropdownButtonFormField<AlarmRingtone>(
+                          initialValue: _ringtone,
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                          ),
+                          icon: const Icon(Icons.expand_more),
+                          items: AlarmRingtone.values
+                              .map(
+                                (ringtone) => DropdownMenuItem<AlarmRingtone>(
+                                  value: ringtone,
+                                  child: Text(ringtone.label.toUpperCase()),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+
+                            setState(() {
+                              _ringtone = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _EditorSelector(
+                        title: 'SNOOZE',
+                        child: DropdownButtonFormField<int>(
+                          initialValue: _snoozeDurationMinutes,
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                          ),
+                          icon: const Icon(Icons.expand_more),
+                          items: const [5, 9, 10, 15, 20]
+                              .map(
+                                (minutes) => DropdownMenuItem<int>(
+                                  value: minutes,
+                                  child: Text('$minutes MINUTES'),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+
+                            setState(() {
+                              _snoozeDurationMinutes = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _EditorSelector(
+                        title: 'DISMISSAL',
+                        child: DropdownButtonFormField<AlarmMissionType>(
+                          initialValue: _missionType,
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                          ),
+                          icon: const Icon(Icons.expand_more),
+                          items: AlarmMissionType.values
+                              .map((missionType) {
+                                final option = _missionOptionFor(
+                                  missionType,
+                                  diagnostics,
+                                );
+                                return DropdownMenuItem<AlarmMissionType>(
+                                  value: missionType,
+                                  enabled: option.enabled,
+                                  child: Text(option.title.toUpperCase()),
+                                );
+                              })
+                              .toList(growable: false),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+
+                            setState(() {
+                              _missionType = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _missionOptionFor(_missionType, diagnostics).detail,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 18),
+                      Text('MAX SNOOZES', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [0, 1, 2, 3, 4, 5]
+                            .map(
+                              (count) => _CountChip(
+                                count: count,
+                                selected: _maxSnoozes == count,
+                                onTap: () {
+                                  setState(() {
+                                    _maxSnoozes = count;
+                                  });
+                                },
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Text('ENABLED', style: theme.textTheme.titleMedium),
+                          const Spacer(),
+                          NeoToggle(
+                            value: _enabled,
+                            onChanged: (value) {
+                              setState(() {
+                                _enabled = value;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: NeoActionButton(
+                  label: 'Save alarm',
+                  expand: true,
+                  padding: const EdgeInsets.symmetric(vertical: 22),
+                  onPressed: _save,
+                ),
               ),
             ],
-            const SizedBox(height: 20),
-            FilledButton.tonal(
-              onPressed: _pickTime,
-              child: Text('Time: ${_time.format(context)}'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _labelController,
-              decoration: const InputDecoration(
-                labelText: 'Label',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Repeat days',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: AlarmWeekday.values
-                  .map((weekday) {
-                    return FilterChip(
-                      label: Text(weekday.shortLabel),
-                      selected: _selectedWeekdays.contains(weekday),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _selectedWeekdays.add(weekday);
-                          } else {
-                            _selectedWeekdays.remove(weekday);
-                          }
-                        });
-                      },
-                    );
-                  })
-                  .toList(growable: false),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<AlarmRingtone>(
-              initialValue: _ringtone,
-              decoration: const InputDecoration(
-                labelText: 'Ringtone policy',
-                border: OutlineInputBorder(),
-              ),
-              items: AlarmRingtone.values
-                  .map(
-                    (ringtone) => DropdownMenuItem<AlarmRingtone>(
-                      value: ringtone,
-                      child: Text(ringtone.label),
-                    ),
-                  )
-                  .toList(growable: false),
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-
-                setState(() {
-                  _ringtone = value;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _ringtone.description,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF56483A),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: _snoozeDurationMinutes,
-                    decoration: const InputDecoration(
-                      labelText: 'Snooze',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [5, 9, 10, 15, 20]
-                        .map(
-                          (minutes) => DropdownMenuItem<int>(
-                            value: minutes,
-                            child: Text('$minutes min'),
-                          ),
-                        )
-                        .toList(growable: false),
-                    onChanged: (value) {
-                      if (value == null) {
-                        return;
-                      }
-
-                      setState(() {
-                        _snoozeDurationMinutes = value;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: _maxSnoozes,
-                    decoration: const InputDecoration(
-                      labelText: 'Max snoozes',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [0, 1, 2, 3, 4, 5]
-                        .map(
-                          (count) => DropdownMenuItem<int>(
-                            value: count,
-                            child: Text('$count'),
-                          ),
-                        )
-                        .toList(growable: false),
-                    onChanged: (value) {
-                      if (value == null) {
-                        return;
-                      }
-
-                      setState(() {
-                        _maxSnoozes = value;
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Dismissal mode',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...AlarmMissionType.values.map((missionType) {
-              final option = _missionOptionFor(missionType, diagnostics);
-              return _MissionChoiceTile(
-                title: option.title,
-                detail: option.detail,
-                selected: _missionType == missionType,
-                enabled: option.enabled,
-                onTap: option.enabled
-                    ? () {
-                        setState(() {
-                          _missionType = missionType;
-                        });
-                      }
-                    : null,
-              );
-            }),
-            const SizedBox(height: 8),
-            SwitchListTile.adaptive(
-              value: _enabled,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Enabled'),
-              subtitle: const Text(
-                'Disabled alarms stay persisted but unscheduled.',
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _enabled = value;
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _save,
-                child: const Text('Save alarm'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -366,87 +424,92 @@ class _MissionOption {
   final bool enabled;
 }
 
-class _MissionChoiceTile extends StatelessWidget {
-  const _MissionChoiceTile({
-    required this.title,
-    required this.detail,
-    required this.selected,
-    required this.enabled,
-    this.onTap,
-  });
+class _TimeBlock extends StatelessWidget {
+  const _TimeBlock({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return NeoPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+      child: Text(
+        label,
+        style: Theme.of(
+          context,
+        ).textTheme.displayMedium?.copyWith(fontStyle: FontStyle.italic),
+      ),
+    );
+  }
+}
+
+class _PeriodChip extends StatelessWidget {
+  const _PeriodChip({required this.label, required this.active});
+
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 54,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: active ? NeoColors.primary : NeoColors.panel,
+        border: Border.all(color: NeoColors.ink, width: 2),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: Theme.of(
+          context,
+        ).textTheme.labelLarge?.copyWith(color: NeoColors.ink),
+      ),
+    );
+  }
+}
+
+class _EditorSelector extends StatelessWidget {
+  const _EditorSelector({required this.title, required this.child});
 
   final String title;
-  final String detail;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return NeoPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.labelMedium),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _CountChip extends StatelessWidget {
+  const _CountChip({required this.count, required this.selected, this.onTap});
+
+  final int count;
   final bool selected;
-  final bool enabled;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final accent = selected ? const Color(0xFF2B6A6C) : const Color(0xFFB7A89A);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: enabled ? const Color(0xFFFFFBF4) : const Color(0xFFF3ECE2),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: selected ? accent : const Color(0xFFD6C7B6),
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  margin: const EdgeInsets.only(top: 2),
-                  decoration: BoxDecoration(
-                    color: selected ? accent : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: accent, width: 2),
-                  ),
-                  child: selected
-                      ? const Icon(Icons.check, size: 14, color: Colors.white)
-                      : null,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: enabled ? null : const Color(0xFF7A6C5E),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        detail,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: enabled
-                              ? const Color(0xFF56483A)
-                              : const Color(0xFF7A6C5E),
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: selected ? NeoColors.primary : NeoColors.panel,
+          border: Border.all(color: NeoColors.ink, width: 2),
         ),
+        alignment: Alignment.center,
+        child: Text('$count', style: Theme.of(context).textTheme.titleMedium),
       ),
     );
   }

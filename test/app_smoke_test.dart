@@ -19,8 +19,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('alarms-oss'), findsOneWidget);
-    expect(find.text('Add alarm'), findsOneWidget);
+    expect(find.text('ALRM'), findsOneWidget);
+    expect(find.text('READY TO RING'), findsOneWidget);
   });
 }
 

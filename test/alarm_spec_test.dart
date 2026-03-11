@@ -1,4 +1,5 @@
 import 'package:alarms_oss/src/features/alarms/domain/alarm_spec.dart';
+import 'package:alarms_oss/src/features/alarms/domain/alarm_mission.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -18,7 +19,7 @@ void main() {
       ringtone: AlarmRingtone.systemNotification,
       snoozeDurationMinutes: 9,
       maxSnoozes: 3,
-      missionType: AlarmMissionType.none,
+      mission: const MissionSpec.math(difficulty: MathMissionDifficulty.hard),
       nextTriggerAtUtc: DateTime.utc(2026, 3, 12, 1, 30),
     );
 
@@ -32,7 +33,8 @@ void main() {
     expect(roundTrip.enabled, isTrue);
     expect(roundTrip.weekdays, original.weekdays);
     expect(roundTrip.ringtone, original.ringtone);
-    expect(roundTrip.missionType, original.missionType);
+    expect(roundTrip.mission.type, original.mission.type);
+    expect(roundTrip.mission.mathDifficulty, original.mission.mathDifficulty);
     expect(roundTrip.nextTriggerAtUtc, original.nextTriggerAtUtc);
   });
 

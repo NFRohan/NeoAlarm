@@ -1,5 +1,6 @@
 package dev.alarmsoss.alarms_oss.alarmengine
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,9 +8,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
 import android.media.Ringtone
 import android.media.RingtoneManager
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -24,6 +25,7 @@ import dev.alarmsoss.alarms_oss.MainActivity
 class AlarmRingingService : Service() {
     private lateinit var alarmStore: AlarmStore
     private lateinit var ringSessionStore: RingSessionStore
+    private lateinit var alarmManager: AlarmManager
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var ringtone: Ringtone? = null
@@ -33,6 +35,7 @@ class AlarmRingingService : Service() {
         super.onCreate()
         alarmStore = AlarmStore(applicationContext)
         ringSessionStore = RingSessionStore(applicationContext)
+        alarmManager = getSystemService(AlarmManager::class.java)
         ensureNotificationChannel()
     }
 
@@ -52,6 +55,11 @@ class AlarmRingingService : Service() {
                     startAlarm(alarmId)
                     START_STICKY
                 }
+            }
+
+            ACTION_SNOOZE -> {
+                snoozeActiveAlarm()
+                START_NOT_STICKY
             }
 
             else -> {
@@ -74,10 +82,14 @@ class AlarmRingingService : Service() {
             return
         }
 
+        cancelSnooze(alarmId)
+
         val session = ringSessionStore.get()
             ?.takeIf { it.alarmId == alarmId }
-            ?: AlarmRingSession.create(alarm).also(ringSessionStore::put)
+            ?.resumeRinging()
+            ?: AlarmRingSession.create(alarm)
 
+        ringSessionStore.put(session)
         currentSession = session
         startForeground(NOTIFICATION_ID, buildNotification(session))
         acquireWakeLock()
@@ -85,8 +97,8 @@ class AlarmRingingService : Service() {
     }
 
     private fun restoreIfNeeded() {
-        val session = ringSessionStore.get() ?: run {
-            dismissActiveAlarm(clearSession = false)
+        val session = ringSessionStore.get()?.takeIf(AlarmRingSession::isRinging) ?: run {
+            stopSelf()
             return
         }
 
@@ -100,10 +112,33 @@ class AlarmRingingService : Service() {
         stopFeedback()
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
+        currentSession?.alarmId?.let(::cancelSnooze)
         currentSession = null
         if (clearSession) {
             ringSessionStore.clear()
         }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun snoozeActiveAlarm() {
+        val session = currentSession ?: ringSessionStore.get()?.takeIf(AlarmRingSession::isRinging) ?: run {
+            stopSelf()
+            return
+        }
+
+        if (!session.canSnooze) {
+            return
+        }
+
+        val triggerAt = System.currentTimeMillis() + session.snoozeDurationMinutes * 60_000L
+        val updatedSession = session.snoozedUntil(triggerAt)
+        ringSessionStore.put(updatedSession)
+        scheduleSnooze(updatedSession)
+        stopFeedback()
+        wakeLock?.takeIf { it.isHeld }?.release()
+        wakeLock = null
+        currentSession = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -195,7 +230,13 @@ class AlarmRingingService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(session.alarmLabel)
-            .setContentText("Alarm is ringing")
+            .setContentText(
+                if (session.mission.spec.type == MissionSpec.TYPE_MATH) {
+                    "Solve the math mission to dismiss"
+                } else {
+                    "Alarm is ringing"
+                },
+            )
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -235,6 +276,7 @@ class AlarmRingingService : Service() {
         const val ACTION_SHOW_ACTIVE_ALARM = "dev.alarmsoss.alarms_oss.SHOW_ACTIVE_ALARM"
         private const val ACTION_START = "dev.alarmsoss.alarms_oss.START_ACTIVE_ALARM"
         private const val ACTION_DISMISS = "dev.alarmsoss.alarms_oss.DISMISS_ACTIVE_ALARM"
+        private const val ACTION_SNOOZE = "dev.alarmsoss.alarms_oss.SNOOZE_ACTIVE_ALARM"
 
         fun start(context: Context, alarmId: String) {
             ContextCompat.startForegroundService(
@@ -253,5 +295,40 @@ class AlarmRingingService : Service() {
                 },
             )
         }
+
+        fun snooze(context: Context) {
+            context.startService(
+                Intent(context, AlarmRingingService::class.java).apply {
+                    action = ACTION_SNOOZE
+                },
+            )
+        }
+    }
+
+    private fun scheduleSnooze(session: AlarmRingSession) {
+        val triggerAt = session.nextSnoozeAtEpochMillis ?: return
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            triggerAt,
+            buildSnoozeOperation(session.alarmId),
+        )
+    }
+
+    private fun cancelSnooze(alarmId: String) {
+        alarmManager.cancel(buildSnoozeOperation(alarmId))
+    }
+
+    private fun buildSnoozeOperation(alarmId: String): PendingIntent {
+        val intent = Intent(this, AlarmReceiver::class.java).apply {
+            putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
+            putExtra(AlarmReceiver.EXTRA_IS_SNOOZE, true)
+        }
+
+        return PendingIntent.getBroadcast(
+            this,
+            "$alarmId:snooze".hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 }

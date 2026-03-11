@@ -22,6 +22,10 @@ abstract class AlarmRepository {
 
   Future<void> dismissActiveAlarmSession();
 
+  Future<void> snoozeActiveAlarmSession();
+
+  Future<bool> submitMathAnswer(String answer);
+
   Future<void> requestBatteryOptimizationExemption();
 
   Future<void> requestCameraPermission();

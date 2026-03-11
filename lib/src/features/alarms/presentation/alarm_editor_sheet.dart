@@ -1,5 +1,6 @@
 import 'package:alarms_oss/src/core/theme/app_theme.dart';
 import 'package:alarms_oss/src/core/ui/neo_brutal_widgets.dart';
+import 'package:alarms_oss/src/features/alarms/domain/alarm_mission.dart';
 import 'package:alarms_oss/src/features/alarms/domain/alarm_engine_status.dart';
 import 'package:alarms_oss/src/features/alarms/domain/alarm_spec.dart';
 import 'package:flutter/material.dart';
@@ -37,7 +38,7 @@ class _AlarmEditorSheetState extends State<AlarmEditorSheet> {
   late AlarmRingtone _ringtone;
   late int _snoozeDurationMinutes;
   late int _maxSnoozes;
-  late AlarmMissionType _missionType;
+  late MissionSpec _mission;
 
   @override
   void initState() {
@@ -49,10 +50,13 @@ class _AlarmEditorSheetState extends State<AlarmEditorSheet> {
     _ringtone = widget.alarm.ringtone;
     _snoozeDurationMinutes = widget.alarm.snoozeDurationMinutes;
     _maxSnoozes = widget.alarm.maxSnoozes;
-    _missionType =
-        _missionOptionFor(widget.alarm.missionType, widget.engineStatus).enabled
-        ? widget.alarm.missionType
-        : AlarmMissionType.none;
+    _mission =
+        _missionOptionFor(
+          widget.alarm.mission.type,
+          widget.engineStatus,
+        ).enabled
+        ? widget.alarm.mission
+        : const MissionSpec.none();
   }
 
   @override
@@ -251,7 +255,7 @@ class _AlarmEditorSheetState extends State<AlarmEditorSheet> {
                       _EditorSelector(
                         title: 'DISMISSAL',
                         child: DropdownButtonFormField<AlarmMissionType>(
-                          initialValue: _missionType,
+                          initialValue: _mission.type,
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                           ),
@@ -275,16 +279,51 @@ class _AlarmEditorSheetState extends State<AlarmEditorSheet> {
                             }
 
                             setState(() {
-                              _missionType = value;
+                              _mission = _mission.copyWith(type: value);
                             });
                           },
                         ),
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        _missionOptionFor(_missionType, diagnostics).detail,
+                        _missionOptionFor(_mission.type, diagnostics).detail,
                         style: theme.textTheme.bodySmall,
                       ),
+                      if (_mission.type == AlarmMissionType.math) ...[
+                        const SizedBox(height: 14),
+                        _EditorSelector(
+                          title: 'MATH DIFFICULTY',
+                          child: DropdownButtonFormField<MathMissionDifficulty>(
+                            initialValue: _mission.mathDifficulty,
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                            ),
+                            icon: const Icon(Icons.expand_more),
+                            items: MathMissionDifficulty.values
+                                .map(
+                                  (difficulty) =>
+                                      DropdownMenuItem<MathMissionDifficulty>(
+                                        value: difficulty,
+                                        child: Text(
+                                          difficulty.label.toUpperCase(),
+                                        ),
+                                      ),
+                                )
+                                .toList(growable: false),
+                            onChanged: (value) {
+                              if (value == null) {
+                                return;
+                              }
+
+                              setState(() {
+                                _mission = _mission.copyWith(
+                                  mathDifficulty: value,
+                                );
+                              });
+                            },
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 18),
                       Text('MAX SNOOZES', style: theme.textTheme.titleMedium),
                       const SizedBox(height: 8),
@@ -368,7 +407,7 @@ class _AlarmEditorSheetState extends State<AlarmEditorSheet> {
         ringtone: _ringtone,
         snoozeDurationMinutes: _snoozeDurationMinutes,
         maxSnoozes: _maxSnoozes,
-        missionType: _missionType,
+        mission: _mission,
         clearNextTriggerAtUtc: true,
       ),
     );
@@ -387,8 +426,8 @@ class _AlarmEditorSheetState extends State<AlarmEditorSheet> {
       AlarmMissionType.math => const _MissionOption(
         title: 'Math mission',
         detail:
-            'Visible now so the configuration model is stable. The actual mission lands in Sprint 5.',
-        enabled: false,
+            'Solve a generated math problem to dismiss the alarm. Difficulty is configurable below.',
+        enabled: true,
       ),
       AlarmMissionType.steps => _MissionOption(
         title: 'Steps mission',

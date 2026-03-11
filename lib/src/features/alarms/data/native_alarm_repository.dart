@@ -34,6 +34,19 @@ class NativeAlarmRepository implements AlarmRepository {
   }
 
   @override
+  Future<void> snoozeActiveAlarmSession() {
+    return _channel.invokeMethod<void>('snoozeActiveSession');
+  }
+
+  @override
+  Future<bool> submitMathAnswer(String answer) async {
+    final accepted = await _channel.invokeMethod<bool>('submitMathAnswer', {
+      'answer': answer,
+    });
+    return accepted ?? false;
+  }
+
+  @override
   Future<void> requestBatteryOptimizationExemption() {
     return _channel.invokeMethod<void>('requestBatteryOptimizationExemption');
   }

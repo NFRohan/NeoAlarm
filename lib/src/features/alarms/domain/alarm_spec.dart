@@ -1,3 +1,5 @@
+import 'package:alarms_oss/src/features/alarms/domain/alarm_mission.dart';
+
 enum AlarmWeekday {
   monday,
   tuesday,
@@ -49,30 +51,6 @@ enum AlarmRingtone {
   }
 }
 
-enum AlarmMissionType {
-  none('none', 'Direct dismiss', 'Dismiss button is immediately available.'),
-  math('math', 'Math mission', 'Mission engine lands next sprint.'),
-  steps(
-    'steps',
-    'Steps mission',
-    'Requires a step sensor and activity recognition.',
-  ),
-  qr('qr', 'QR mission', 'Requires a camera and camera permission.');
-
-  const AlarmMissionType(this.id, this.label, this.description);
-
-  final String id;
-  final String label;
-  final String description;
-
-  static AlarmMissionType fromId(String? value) {
-    return AlarmMissionType.values.firstWhere(
-      (missionType) => missionType.id == value,
-      orElse: () => AlarmMissionType.none,
-    );
-  }
-}
-
 class AlarmSpec {
   const AlarmSpec({
     required this.id,
@@ -85,7 +63,7 @@ class AlarmSpec {
     required this.ringtone,
     required this.snoozeDurationMinutes,
     required this.maxSnoozes,
-    required this.missionType,
+    required this.mission,
     required this.nextTriggerAtUtc,
   });
 
@@ -103,7 +81,7 @@ class AlarmSpec {
       ringtone: AlarmRingtone.systemAlarm,
       snoozeDurationMinutes: 9,
       maxSnoozes: 3,
-      missionType: AlarmMissionType.none,
+      mission: const MissionSpec.none(),
       nextTriggerAtUtc: null,
     );
   }
@@ -130,7 +108,10 @@ class AlarmSpec {
       ringtone: AlarmRingtone.fromId(raw['ringtoneId'] as String?),
       snoozeDurationMinutes: (raw['snoozeDurationMinutes'] as num).toInt(),
       maxSnoozes: (raw['maxSnoozes'] as num).toInt(),
-      missionType: AlarmMissionType.fromId(raw['missionType'] as String?),
+      mission: MissionSpec.fromMap(
+        raw['mission'] as Map<Object?, Object?>?,
+        fallbackType: raw['missionType'] as String?,
+      ),
       nextTriggerAtUtc: nextTriggerValue == null
           ? null
           : DateTime.parse(nextTriggerValue as String).toUtc(),
@@ -147,7 +128,7 @@ class AlarmSpec {
   final AlarmRingtone ringtone;
   final int snoozeDurationMinutes;
   final int maxSnoozes;
-  final AlarmMissionType missionType;
+  final MissionSpec mission;
   final DateTime? nextTriggerAtUtc;
 
   DateTime? get nextTriggerAtLocal => nextTriggerAtUtc?.toLocal();
@@ -164,7 +145,7 @@ class AlarmSpec {
 
   String get ringtoneSummary => ringtone.label;
 
-  String get missionSummary => missionType.label;
+  String get missionSummary => mission.summary;
 
   AlarmSpec copyWith({
     String? id,
@@ -177,7 +158,7 @@ class AlarmSpec {
     AlarmRingtone? ringtone,
     int? snoozeDurationMinutes,
     int? maxSnoozes,
-    AlarmMissionType? missionType,
+    MissionSpec? mission,
     DateTime? nextTriggerAtUtc,
     bool clearNextTriggerAtUtc = false,
   }) {
@@ -196,7 +177,7 @@ class AlarmSpec {
       snoozeDurationMinutes:
           snoozeDurationMinutes ?? this.snoozeDurationMinutes,
       maxSnoozes: maxSnoozes ?? this.maxSnoozes,
-      missionType: missionType ?? this.missionType,
+      mission: mission ?? this.mission,
       nextTriggerAtUtc: clearNextTriggerAtUtc
           ? null
           : nextTriggerAtUtc ?? this.nextTriggerAtUtc,
@@ -215,7 +196,7 @@ class AlarmSpec {
       'ringtoneId': ringtone.id,
       'snoozeDurationMinutes': snoozeDurationMinutes,
       'maxSnoozes': maxSnoozes,
-      'missionType': missionType.id,
+      'mission': mission.toMap(),
       'nextTriggerAtUtc': nextTriggerAtUtc?.toIso8601String(),
     };
   }

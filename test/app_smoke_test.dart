@@ -32,6 +32,12 @@ class _FakeAlarmRepository implements AlarmRepository {
   Future<void> dismissActiveAlarmSession() async {}
 
   @override
+  Future<void> snoozeActiveAlarmSession() async {}
+
+  @override
+  Future<bool> submitMathAnswer(String answer) async => false;
+
+  @override
   Future<AlarmEngineStatus> getStatus() async {
     return const AlarmEngineStatus(
       canScheduleExactAlarms: true,

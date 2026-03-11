@@ -15,7 +15,7 @@ data class AlarmRecord(
     val ringtoneId: String,
     val snoozeDurationMinutes: Int,
     val maxSnoozes: Int,
-    val missionType: String,
+    val mission: MissionSpec,
     val nextTriggerAtEpochMillis: Long?,
 ) {
     fun toChannelMap(): Map<String, Any?> {
@@ -30,7 +30,7 @@ data class AlarmRecord(
             "ringtoneId" to ringtoneId,
             "snoozeDurationMinutes" to snoozeDurationMinutes,
             "maxSnoozes" to maxSnoozes,
-            "missionType" to missionType,
+            "mission" to mission.toChannelMap(),
             "nextTriggerAtUtc" to nextTriggerAtEpochMillis?.let {
                 Instant.ofEpochMilli(it).toString()
             },
@@ -49,7 +49,7 @@ data class AlarmRecord(
             put("ringtoneId", ringtoneId)
             put("snoozeDurationMinutes", snoozeDurationMinutes)
             put("maxSnoozes", maxSnoozes)
-            put("missionType", missionType)
+            put("mission", mission.toJson())
             put("nextTriggerAtEpochMillis", nextTriggerAtEpochMillis)
         }
     }
@@ -69,7 +69,10 @@ data class AlarmRecord(
                 ringtoneId = (raw["ringtoneId"] as? String) ?: "system_alarm",
                 snoozeDurationMinutes = (raw["snoozeDurationMinutes"] as Number).toInt(),
                 maxSnoozes = (raw["maxSnoozes"] as Number).toInt(),
-                missionType = raw["missionType"] as String,
+                mission = MissionSpec.fromChannelMap(
+                    raw["mission"] as? Map<*, *>,
+                    fallbackType = raw["missionType"] as? String,
+                ),
                 nextTriggerAtEpochMillis = when (val rawNextTrigger = raw["nextTriggerAtUtc"]) {
                     is String -> Instant.parse(rawNextTrigger).toEpochMilli()
                     else -> null
@@ -102,7 +105,10 @@ data class AlarmRecord(
                 ringtoneId = json.optString("ringtoneId", "system_alarm"),
                 snoozeDurationMinutes = json.optInt("snoozeDurationMinutes", 9),
                 maxSnoozes = json.optInt("maxSnoozes", 3),
-                missionType = json.optString("missionType", "none"),
+                mission = MissionSpec.fromJson(
+                    json.optJSONObject("mission"),
+                    fallbackType = json.optString("missionType", MissionSpec.TYPE_NONE),
+                ),
                 nextTriggerAtEpochMillis = nextTrigger,
             )
         }

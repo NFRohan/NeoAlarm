@@ -25,6 +25,19 @@ class ActiveAlarmSessionController {
     _ref.invalidate(alarmListControllerProvider);
   }
 
+  Future<void> snooze() async {
+    await _repository.snoozeActiveAlarmSession();
+    _ref.invalidate(activeAlarmSessionProvider);
+    _ref.invalidate(alarmListControllerProvider);
+  }
+
+  Future<bool> submitMathAnswer(String answer) async {
+    final accepted = await _repository.submitMathAnswer(answer);
+    _ref.invalidate(activeAlarmSessionProvider);
+    _ref.invalidate(alarmListControllerProvider);
+    return accepted;
+  }
+
   void refresh() {
     _ref.invalidate(activeAlarmSessionProvider);
   }

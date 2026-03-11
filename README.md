@@ -1,5 +1,16 @@
 # NeoAlarm
 
+[![Latest Release](https://img.shields.io/github/v/release/NFRohan/NeoAlarm?display_name=tag)](https://github.com/NFRohan/NeoAlarm/releases/latest)
+[![Android CI](https://github.com/NFRohan/NeoAlarm/actions/workflows/android.yml/badge.svg)](https://github.com/NFRohan/NeoAlarm/actions/workflows/android.yml)
+[![CodeQL](https://github.com/NFRohan/NeoAlarm/actions/workflows/codeql.yml/badge.svg)](https://github.com/NFRohan/NeoAlarm/actions/workflows/codeql.yml)
+[![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Android%2010%2B-34A853)
+![Flutter](https://img.shields.io/badge/Flutter-3.41.x-02569B)
+
+<p align="center">
+  <img src="screenshots/Home_Dark.jpg" width="300" alt="NeoAlarm home screen in dark mode">
+</p>
+
 Android-first, local-first, open source alarm app built with Flutter and a native Android alarm engine.
 
 NeoAlarm exists to provide a mission-driven alarm experience without ads, subscriptions, cloud dependency, or a fragile "Flutter-only" runtime model. The product surface is Flutter. The alarm-critical behavior is native Android.
@@ -34,6 +45,31 @@ Implemented today:
 - QR mission backed by a reusable native vision pipeline
 - quiet timer sourced from the persisted native timeout deadline
 - minified release builds, CodeQL, dependency review, and release artifact workflows
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/Home_Light.jpg" width="220" alt="NeoAlarm home screen in light mode"><br><sub>Home · Light</sub></td>
+    <td align="center"><img src="screenshots/SettingsPanel_Dark.jpg" width="220" alt="NeoAlarm settings panel in dark mode"><br><sub>Settings · Dark</sub></td>
+    <td align="center"><img src="screenshots/Home_Dark.jpg" width="220" alt="NeoAlarm home screen in dark mode"><br><sub>Home · Dark</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/SetAlarm_Dark.jpg" width="220" alt="Alarm editor in dark mode"><br><sub>Alarm Editor</sub></td>
+    <td align="center"><img src="screenshots/SetTime_Dark.jpg" width="220" alt="Roller-style time picker in dark mode"><br><sub>Time Picker · Dark</sub></td>
+    <td align="center"><img src="screenshots/SetTime_Light.jpg" width="220" alt="Roller-style time picker in light mode"><br><sub>Time Picker · Light</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/AlarmScreen_Dark.jpg" width="220" alt="Active alarm screen in dark mode"><br><sub>Active Alarm</sub></td>
+    <td align="center"><img src="screenshots/MathMission_Dark.jpg" width="220" alt="Math mission in dark mode"><br><sub>Math Mission</sub></td>
+    <td align="center"><img src="screenshots/StepsMission_Dark.jpg" width="220" alt="Steps mission in dark mode"><br><sub>Steps Mission</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/QrMission_Dark.jpg" width="220" alt="QR mission in dark mode"><br><sub>QR Mission</sub></td>
+    <td align="center"><img src="screenshots/SetQrTarget_Dark.jpg" width="220" alt="QR target capture flow in dark mode"><br><sub>Set QR Target</sub></td>
+    <td></td>
+  </tr>
+</table>
 
 ## Product Principles
 
@@ -286,6 +322,7 @@ See [docs/testing/performance-workflow.md](docs/testing/performance-workflow.md)
 - [docs/planning/overall-plan.md](docs/planning/overall-plan.md): implementation roadmap
 - [docs/planning/sprint-plan.md](docs/planning/sprint-plan.md): sprint breakdown
 - [docs/adr/README.md](docs/adr/README.md): architecture decision records
+- [`screenshots/`](screenshots): current app screenshots used in repository documentation
 
 ## Contributing
 
@@ -306,6 +343,10 @@ Not currently in scope:
 - server-side analytics
 - account system
 - guaranteed blocking of the stock Android power menu
+
+## License
+
+NeoAlarm is licensed under [GNU General Public License v3.0](LICENSE).
 
 ## Documentation
 

@@ -9,6 +9,7 @@ This project treats documentation as part of the engineering surface, not as a c
 - Read [planning/sprint-plan.md](planning/sprint-plan.md) for the execution sequence.
 - Read [testing/test-strategy.md](testing/test-strategy.md) for the quality and CI model.
 - Read [testing/performance-workflow.md](testing/performance-workflow.md) for Macrobenchmark, Perfetto, and dependency-audit usage.
+- Browse [../screenshots](../screenshots) for current app screenshots used in the repository front page and visual documentation.
 - Read [architecture/engineering-story.md](architecture/engineering-story.md) to understand why the system is shaped this way.
 - Read [architecture/overview.md](architecture/overview.md) for the high-level technical model.
 - Read [architecture/active-session-lifecycle.md](architecture/active-session-lifecycle.md) for the authoritative active alarm state machine.
@@ -80,10 +81,12 @@ This project treats documentation as part of the engineering surface, not as a c
 ## Documentation Layers
 
 - `README.md`: top-level project orientation.
+- `LICENSE`: GPLv3 project license.
 - `docs/documentation-strategy.md`: what documentation must exist and when it must be updated.
 - `docs/planning/*.md`: roadmap and sprint-level execution planning.
 - `docs/testing/*.md`: quality strategy, CI expectations, and device-testing approach.
 - `docs/testing/performance-workflow.md`: performance benchmarking, Perfetto capture, and dependency-audit workflow.
+- `screenshots/`: current app screenshots for the README and future visual documentation.
 - `docs/architecture/*.md`: stable system-level understanding and engineering narrative.
 - `docs/adr/*.md`: irreversible or high-impact decisions with context and tradeoffs.
 - `docs/contributing/*.md`: contributor workflow and engineering expectations.

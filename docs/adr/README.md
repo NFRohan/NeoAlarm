@@ -41,3 +41,4 @@ Recommended sections:
 - [0002-native-vision-mission-pipeline.md](0002-native-vision-mission-pipeline.md)
 - [0003-exact-alarm-permission-strategy.md](0003-exact-alarm-permission-strategy.md)
 - [0004-mission-confirmation-and-inactivity-retrigger.md](0004-mission-confirmation-and-inactivity-retrigger.md)
+- [0005-detector-driven-steps-and-mission-activity-policy.md](0005-detector-driven-steps-and-mission-activity-policy.md)

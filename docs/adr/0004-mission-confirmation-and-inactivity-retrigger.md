@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-03-11
+- Related: [0005-detector-driven-steps-and-mission-activity-policy.md](0005-detector-driven-steps-and-mission-activity-policy.md)
 
 ## Context
 
@@ -34,6 +35,7 @@ While the session is `mission_active`:
 - the alarm audio and vibration are stopped
 - native code schedules a 30-second inactivity timeout
 - Flutter sends lightweight activity signals while the user interacts with the mission UI
+- later ADRs may narrow which interactions are considered valid mission activity
 - each activity signal refreshes the native timeout
 - if the timeout expires, the alarm re-enters `ringing`
 

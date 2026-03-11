@@ -37,6 +37,7 @@ Current mission-specific config includes:
 
 - math difficulty
 - math problem count
+- step goal
 
 ### Native Mission Configuration
 
@@ -181,11 +182,31 @@ If the mission can take time, it must signal activity while the user interacts.
 Examples:
 
 - text entry
-- taps on mission controls
+- taps on mission controls that are actually part of solving the mission
 - camera scan interactions
-- sensor mission checkpoints
+- accepted sensor mission checkpoints
 
 Without activity signaling, the native inactivity timeout will re-trigger ringing even while the mission UI is visible.
+
+Important rule:
+
+- do not treat generic screen taps as activity unless they are genuinely meaningful to the mission
+- do not let permission-repair actions count as mission progress or quiet-time extension
+- if the mission is hardware-driven, prefer native-origin evidence over Dart-side guesses
+
+### 5A. Define Capability Gating And Recovery
+
+Be explicit about:
+
+- what hardware is required
+- what runtime permission is required
+- whether the mission should be hidden or disabled when prerequisites are missing
+- where the repair path lives
+
+Current policy:
+
+- impossible mission configs should be hidden from the editor instead of being saved in a broken state
+- diagnostics or settings may still expose a repair action to make the mission available later
 
 ### 6. Define Dismiss Semantics
 
@@ -198,6 +219,20 @@ Be explicit about:
 
 Write these rules down in docs if they are not obvious.
 
+### 7. Define Quiet-Timer Behavior
+
+If the mission can enter a silent `mission_active` state, define:
+
+- what resets the quiet timer
+- what must never reset it
+- whether Flutter needs to display the remaining silent window
+
+Current policy:
+
+- native code owns the timeout deadline
+- Flutter may display that deadline but must not invent its own authoritative timer
+- the displayed countdown should refresh from session state after valid mission activity
+
 ## Rules For Mission Authors
 
 - Keep mission-specific persistence inside the mission runtime, not in ad hoc UI state.
@@ -205,8 +240,9 @@ Write these rules down in docs if they are not obvious.
 - Prefer explicit runtime fields over deriving critical state from UI assumptions.
 - Preserve progress across temporary UI loss and process death unless a reset is deliberate and documented.
 - Gate unsupported hardware and permission states in the editor before an alarm is saved in a broken configuration.
+- Prefer native-origin sensor, analyzer, or permission state over client-side approximations when anti-cheat matters.
 
-## Math Mission As The Reference Implementation
+## Math And Steps As Reference Implementations
 
 The current math mission demonstrates:
 
@@ -217,7 +253,14 @@ The current math mission demonstrates:
 - incremental mission progress
 - silent mission solving with inactivity re-trigger
 
-Use math as the reference shape before adding `Steps` or `QR`.
+The current steps mission demonstrates:
+
+- permission and hardware gating before configuration
+- native detector-driven progress
+- mission-specific activity signals from hardware rather than generic touch input
+- quiet-time enforcement that is visible in Flutter but owned by native state
+
+Use math and steps as the reference shapes before adding `QR` or future missions.
 
 ## Testing Expectations For New Missions
 
@@ -229,6 +272,9 @@ At minimum, add coverage for:
 - incorrect input handling
 - recovery after session reload
 - inactivity re-trigger behavior if the mission can remain active for extended time
+- permission-revoked behavior if the mission depends on a runtime permission
+- quiet-timer refresh behavior when valid activity occurs
+- exploit cases where invalid taps or gestures should not keep the mission silent
 
 Also add manual-device validation notes if the mission depends on:
 

@@ -39,11 +39,18 @@ This project treats documentation as part of the engineering surface, not as a c
 - [adr/0001-flutter-ui-native-android-core.md](adr/0001-flutter-ui-native-android-core.md)
 - [architecture/active-session-lifecycle.md](architecture/active-session-lifecycle.md)
 - [adr/0004-mission-confirmation-and-inactivity-retrigger.md](adr/0004-mission-confirmation-and-inactivity-retrigger.md)
+- [adr/0005-detector-driven-steps-and-mission-activity-policy.md](adr/0005-detector-driven-steps-and-mission-activity-policy.md)
 
 ### I want to work on QR or future vision missions
 
 - [adr/0002-native-vision-mission-pipeline.md](adr/0002-native-vision-mission-pipeline.md)
 - [architecture/overview.md](architecture/overview.md)
+
+### I want to work on sensor missions or mission anti-cheat
+
+- [architecture/active-session-lifecycle.md](architecture/active-session-lifecycle.md)
+- [contributing/mission-authoring.md](contributing/mission-authoring.md)
+- [adr/0005-detector-driven-steps-and-mission-activity-policy.md](adr/0005-detector-driven-steps-and-mission-activity-policy.md)
 
 ### I want to add a new architectural decision
 

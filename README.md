@@ -22,3 +22,7 @@ The project currently has:
 - dashboard, editor, diagnostics, and settings flows
 - math mission enforcement with configurable difficulty and problem count
 - mission confirmation plus native inactivity re-trigger behavior
+- steps mission enforcement with native `TYPE_STEP_DETECTOR` tracking
+- activity-recognition gating in the editor plus settings-based repair/re-enable flow
+- quiet-timer countdown UI sourced from the persisted native mission timeout
+- exploit hardening so only mission-valid activity can keep a mission silent

@@ -56,6 +56,7 @@ Cover:
 - snooze cap logic
 - mission configuration validation
 - mission problem-count validation
+- step-goal validation and detector-progress serialization
 - alarm serialization and persistence mapping
 - analyzer result mapping for vision missions
 
@@ -72,6 +73,8 @@ Cover:
 - active `RingSession` query and recovery handoff
 - mission state transitions that cross the Flutter/native boundary
 - mission activity signaling and inactivity re-trigger contract
+- quiet-timer deadline propagation from native session state into Flutter UI
+- mission-availability gating when sensors or permissions are missing
 
 These tests should prove that the app shell and the native core agree on state shape and lifecycle.
 
@@ -86,6 +89,8 @@ Cover:
 - foreground ringing service startup
 - math mission flow including multi-problem completion
 - mission confirmation flow and 30-second inactivity re-trigger
+- quiet-timer UI countdown and refresh after valid mission activity
+- steps mission progress on supported emulators or test doubles where available
 - QR mission permission flow
 
 Use emulator tests for confidence, not for final reliability claims. Emulator behavior is useful, but it does not fully represent Doze, OEM battery policies, or lock-screen quirks on real devices.
@@ -102,6 +107,8 @@ Cover:
 - step mission on supported device types
 - recovery after process death where automation is practical
 - mission-active recovery and idle re-trigger behavior where automation is practical
+- activity-recognition revocation while a steps mission is active where automation is practical
+- cadence-filter behavior and obvious anti-cheat regression cases where automation is practical
 
 Use this layer to catch issues that emulators miss, but do not assume cloud devices replace the entire manual matrix.
 
@@ -120,6 +127,9 @@ Cover:
 - mission confirmation behavior
 - mission-active silence while interacting
 - re-trigger after 30 seconds of no mission activity
+- quiet-timer accuracy during math input and step activity
+- random taps not extending math mission silence
+- activity-recognition revoked during an active steps mission
 - OEM-specific battery optimization problems
 
 Target at least:

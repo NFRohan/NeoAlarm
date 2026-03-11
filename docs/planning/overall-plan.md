@@ -32,9 +32,12 @@ The first release should optimize for:
 - Mission-enforced dismissal with `Math`, `Steps`, and `QR`
 - Mission confirmation flow that silences the alarm only after explicit mission start
 - Native inactivity re-trigger while a mission is active
+- A quiet-timer indicator sourced from the persisted native mission timeout
 - Local storage for alarms, sessions, and mission configuration
 - Recovery into the active mission screen after process death or forced app relaunch
 - Permissions and device-health diagnostics for exact alarms, notifications, camera, sensors, and battery optimization status
+- Steps mission gating and repair flow for missing `ACTIVITY_RECOGNITION`
+- Mission-specific activity enforcement so silence cannot be prolonged by meaningless taps
 
 ### Early Post-MVP Feature Pack
 
@@ -83,7 +86,9 @@ Prioritize practical reliability features before novelty features:
 
 ### Phase 5: Sensor And Vision Missions
 
-- Add `Steps` using the hardware step sensor where available
+- Add `Steps` using `TYPE_STEP_DETECTOR` where available
+- Gate the mission on sensor support and `ACTIVITY_RECOGNITION`, with a repair path in settings
+- Filter impossible cadence bursts and keep silent mission time tied to accepted native step events
 - Build the native CameraX-based `VisionMissionDriver`
 - Implement `QR` as the first `VisionAnalyzer`
 - Keep camera ownership native so future object-detection analyzers can be swapped in without redesign
@@ -128,6 +133,7 @@ That means:
 - invariants are written down before they become bugs
 - tests cover rule-heavy logic and integration boundaries
 - unsupported device states fail clearly instead of silently
+- mission activity definitions are explicit and enforceable
 - contributor-facing extension seams are named and stable
 
 ## Success Criteria For MVP
@@ -139,8 +145,10 @@ The MVP is complete when:
 - a full-screen alarm experience launches from the lock screen
 - snooze limits are enforced consistently
 - a mission can move from ringing to silent solving without losing enforcement
+- the quiet timer shown in Flutter reflects the native re-trigger deadline
 - `Math`, `Steps`, and `QR` can each gate dismissal
 - active missions recover correctly after app process death
+- impossible mission configs are hidden or blocked before they can be saved
 - contributors can identify the alarm engine, mission platform, and vision pipeline boundaries from docs alone
 
 ## Deferred For Later

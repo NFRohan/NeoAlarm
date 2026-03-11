@@ -114,19 +114,24 @@ Prove the mission architecture with one fully working mission and native snooze 
 
 ### Goal
 
-Add the first physical mission and prove sensor-capability handling.
+Add the first physical mission and prove sensor-capability handling without weakening mission enforcement.
 
 ### Scope
 
 - integrate the hardware step sensor
+- use `TYPE_STEP_DETECTOR` for live step progress
 - implement `Steps` mission configuration and runner UI
 - gate the mission on device capability
 - handle unsupported devices and revoked permissions cleanly
+- keep the repair path in settings while hiding impossible editor configurations
+- add quiet-timer visibility and harden mission activity rules against meaningless taps or shake bursts
 
 ### Done Criteria
 
 - the steps mission works on supported devices
 - unsupported devices fail clearly in the editor and active mission flow
+- the quiet timer reflects the real native re-trigger deadline
+- only valid mission activity can keep a mission silent
 - activity-recognition and sensor edge cases are documented and manually tested
 
 ## Sprint 7: Native Vision Pipeline And QR Mission

@@ -31,9 +31,14 @@ Owns a stable mission contract so dismissal challenges can be added without rewr
 
 Initial mission types:
 
-- Math
-- Steps
-- QR
+- Math, implemented
+- Steps, implemented
+- QR, planned
+
+Current note:
+
+- Math progress is native-authored and Flutter-rendered
+- Steps progress is driven by native `TYPE_STEP_DETECTOR` events
 
 ### Vision Pipeline
 
@@ -66,9 +71,16 @@ This keeps the QR mission fast today and makes future on-device object detection
 
 1. A mission alarm first enters the `ringing` state and shows a confirmation step.
 2. The user explicitly starts the mission, which transitions the session into `mission_active`.
-3. The mission driver reports user activity and mission answers back to the native layer.
-4. Native session logic validates progress, dismissal, snooze rules, and inactivity re-triggering.
+3. Native code persists the current mission timeout deadline and exposes it to Flutter for the quiet-timer UI.
+4. The mission driver reports only mission-valid activity back to the native layer.
+5. Native session logic validates progress, dismissal, snooze rules, and inactivity re-triggering.
 5. The service stops only after a successful dismiss path.
+
+For current missions, the activity contract is mission-specific:
+
+- Math: answer-field interaction and answer submission can refresh the timeout
+- Steps: accepted `TYPE_STEP_DETECTOR` events refresh the timeout
+- Generic screen taps do not buy silence by themselves
 
 ### Recovery
 
@@ -86,6 +98,8 @@ The current active session has three persisted states:
 
 Mission inactivity is enforced natively. If a `mission_active` session goes idle for 30 seconds, the alarm re-enters `ringing` while preserving mission progress.
 
+The session also persists the current mission-timeout deadline so Flutter can render a quiet timer from native state instead of inventing a separate client-side countdown.
+
 See [active-session-lifecycle.md](active-session-lifecycle.md) for the full state machine and invariants.
 
 ## Key Invariants
@@ -94,7 +108,9 @@ See [active-session-lifecycle.md](active-session-lifecycle.md) for the full stat
 - Ring audio must start before any mission UI dependency is satisfied.
 - Persisted alarm state and persisted ring-session state must be recoverable independently.
 - Mission silence must not depend on a Flutter-only timer.
+- Mission silence must depend on mission-valid activity, not generic taps anywhere on the screen.
 - A mission may be silent only while the native session is actively enforcing user engagement.
+- If Flutter shows a quiet timer, it must be derived from the persisted native deadline.
 - Mission implementations must not mutate scheduler behavior directly.
 - Vision missions must depend on analyzer results, not raw cross-platform frame transport.
 

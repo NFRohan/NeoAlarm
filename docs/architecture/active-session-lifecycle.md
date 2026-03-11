@@ -53,6 +53,7 @@ Meaning:
 - alarm audio and vibration have been stopped
 - the mission is still active and dismissal may still be blocked
 - a native inactivity timeout is armed
+- the current inactivity deadline is persisted with the session
 
 This state exists to reduce user-hostile behavior while keeping the anti-cheat model intact. The alarm is silent only while the user is actively working through the mission.
 
@@ -95,6 +96,7 @@ Why:
 3. The session transitions from `ringing` to `mission_active`.
 4. Audio and vibration stop.
 5. A native 30-second inactivity re-trigger timer is scheduled.
+6. The exact mission timeout deadline is persisted so Flutter can render the quiet timer from native state.
 
 ### 4. User Interacts During The Mission
 
@@ -102,13 +104,19 @@ While the session is `mission_active`, Flutter sends lightweight activity signal
 
 Current examples:
 
-- touching the mission surface
 - focusing or editing the math answer field
-- submitting an answer
+- submitting a math answer
+- accepted `TYPE_STEP_DETECTOR` events for the steps mission
 
 Each activity signal refreshes the 30-second inactivity timer.
 
 This means the alarm stays silent only while the user is genuinely interacting with the mission.
+
+Important exclusions:
+
+- generic taps on empty screen space do not count as mission activity
+- permission-repair buttons do not count as mission activity
+- steps missions are kept silent by accepted detector events, not by touch input
 
 ### 5. User Goes Idle During The Mission
 
@@ -120,6 +128,12 @@ If no activity is registered for 30 seconds:
 4. audio and vibration resume
 
 Mission progress is preserved. Re-triggering is not a reset of the mission; it is a reset of the alarm noise.
+
+### Quiet Timer Visibility
+
+Flutter may show a quiet timer while the session is `mission_active`.
+
+That timer must be derived from the persisted native deadline rather than from a local guessed countdown. If the timeout is refreshed by native code, the UI must refresh from the session model instead of assuming its own timer is still authoritative.
 
 ### 6. User Answers Correctly
 
@@ -193,7 +207,9 @@ That is why the Android activity checks whether a session is active, not only wh
 - `ringing` means the service is expected to be responsible for audio and vibration.
 - `mission_active` means the alarm is silent but still enforceable.
 - inactivity re-triggering must be driven by native timers, not Flutter timers.
+- any quiet timer shown in Flutter must reflect the persisted native timeout deadline.
 - re-triggering must preserve mission progress.
+- mission activity must be mission-specific and must not be reducible to random pointer taps.
 - dismissing an active session must cancel both snooze and mission inactivity timers.
 - active-session recovery must work even if the app route stack is lost.
 
@@ -202,6 +218,7 @@ That is why the Android activity checks whether a session is active, not only wh
 - Do not add mission logic that bypasses the session store.
 - Do not make silence during a mission depend on a Dart-only timer.
 - Do not treat "user opened the mission screen" as equivalent to "user actively engaged the mission".
+- Do not let permission-repair actions or generic mission-surface taps extend silence unless that is intentionally part of the mission definition.
 - Do not reset mission progress when inactivity re-triggering happens unless that behavior is intentionally redesigned and documented.
 
 ## Known Scope Limits
@@ -209,7 +226,8 @@ That is why the Android activity checks whether a session is active, not only wh
 The current inactivity model is intentionally simple:
 
 - one fixed timeout window of 30 seconds
-- activity is signaled from explicit UI interactions
-- no attempt is made to infer attention from motion, foreground state, or accessibility events
+- activity is signaled from explicit mission-valid interactions
+- steps rely on a native step detector rather than generic motion inference
+- no attempt is made to infer attention from foreground state or accessibility events beyond the defined mission signals
 
 If this behavior changes, update this document and write an ADR if the state machine or ownership model changes with it.

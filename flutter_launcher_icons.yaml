@@ -1,7 +1,8 @@
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: false
-  image_path_android: "assets/alarm-clock.png"
-  adaptive_icon_foreground: "assets/alarm-clock.png"
+  image_path_android: "assets/clock.png"
+  adaptive_icon_foreground: "assets/clock.png"
   adaptive_icon_background: "#F8F8F5"
+  adaptive_icon_foreground_inset: 24
   min_sdk_android: 21

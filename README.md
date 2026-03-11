@@ -306,10 +306,6 @@ Not currently in scope:
 - account system
 - guaranteed blocking of the stock Android power menu
 
-## Asset Attribution
-
-- Launcher icon source: [Alarm icons created by justicon - Flaticon](https://www.flaticon.com/free-icons/alarm)
-
 ## Documentation
 
 This repository treats documentation as part of the engineering surface, not cleanup. If you change system behavior, update the docs in the same patch.

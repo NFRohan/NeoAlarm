@@ -126,6 +126,7 @@ Cover:
 - reboot recovery before first unlock
 - manual time and timezone changes
 - overlapping alarms
+- overlapping alarms with explicit preemption and resume validation
 - full-screen launch from lock screen
 - app swipe-away and process reclaim during ringing
 - mission confirmation behavior
@@ -135,6 +136,7 @@ Cover:
 - random taps not extending math mission silence
 - activity-recognition revoked during an active steps mission
 - repeated QR permission recovery or app resume not causing scanner churn or camera-session breakage
+- second alarm firing while a mission is active and correctly resurfacing the interrupted session afterward
 - OEM-specific battery optimization problems
 - release-build startup timing via `am start -W`
 - release-build memory shape via `dumpsys meminfo`
@@ -211,8 +213,8 @@ If a release-only regression is found, do not guess at broad keep rules first. N
 ### Main Branch Workflow
 
 - run the pull request workflow checks
-- run emulator smoke tests
-- publish a debug or internal QA APK artifact
+- build a release verification APK
+- publish the release verification APK artifact
 - publish CodeQL results to GitHub code scanning
 
 ### Nightly Or Release Workflow
@@ -228,8 +230,8 @@ If a release-only regression is found, do not guess at broad keep rules first. N
 
 The repository now includes these GitHub Actions workflows:
 
-- `Android CI`: `flutter analyze`, `flutter test`, debug APK build, and artifact upload
-- `Android CI`: `flutter analyze`, `flutter test`, debug APK build, release APK verification build, and artifact upload
+- `Android CI`: on pull requests, `flutter analyze`, `flutter test`, debug APK build, and debug artifact upload
+- `Android CI`: on `main` and manual runs, `flutter analyze`, `flutter test`, release APK verification build, and artifact upload
 - `CodeQL`: SAST for Android code and workflow code
 - `Dependency Review`: pull-request dependency-risk review
 - `Distribute Android Release`: signed release APK and app bundle build plus GitHub release publishing on `v*` tags or manual workflow dispatch

@@ -79,6 +79,7 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final primaryForeground = NeoColors.foregroundOn(NeoColors.primary);
     final challenge = widget.session.mission.mathChallenge;
 
     if (challenge == null) {
@@ -104,7 +105,9 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
                 if (widget.session.mission.hasMultipleProblems) ...[
                   Text(
                     'Problem ${widget.session.mission.currentProblemNumber} of ${widget.session.mission.targetProblemCount}',
-                    style: theme.textTheme.labelMedium,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: primaryForeground,
+                    ),
                   ),
                   const SizedBox(height: 10),
                 ],
@@ -112,6 +115,7 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
                   child: Text(
                     challenge.prompt,
                     style: theme.textTheme.displayMedium?.copyWith(
+                      color: primaryForeground,
                       fontSize: 52,
                     ),
                   ),

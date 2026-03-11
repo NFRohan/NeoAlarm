@@ -37,6 +37,7 @@ This project treats documentation as part of the engineering surface, not as a c
 - [planning/sprint-plan.md](planning/sprint-plan.md)
 - [adr/0006-security-hardening-and-release-pipeline.md](adr/0006-security-hardening-and-release-pipeline.md)
 - [adr/0009-event-driven-active-session-and-vision-lifecycle.md](adr/0009-event-driven-active-session-and-vision-lifecycle.md)
+- [adr/0011-overlapping-alarm-session-stack.md](adr/0011-overlapping-alarm-session-stack.md)
 
 ### I want to implement or review alarm delivery behavior
 
@@ -49,6 +50,7 @@ This project treats documentation as part of the engineering surface, not as a c
 - [adr/0007-direct-boot-alarm-persistence.md](adr/0007-direct-boot-alarm-persistence.md)
 - [adr/0008-direct-boot-safe-flutter-startup.md](adr/0008-direct-boot-safe-flutter-startup.md)
 - [adr/0009-event-driven-active-session-and-vision-lifecycle.md](adr/0009-event-driven-active-session-and-vision-lifecycle.md)
+- [adr/0011-overlapping-alarm-session-stack.md](adr/0011-overlapping-alarm-session-stack.md)
 
 ### I want to work on QR or future vision missions
 

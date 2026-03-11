@@ -79,8 +79,33 @@ class AlarmRingingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startAlarm(alarmId: String) {
-        val alarm = alarmStore.get(alarmId) ?: run {
-            dismissActiveAlarm(clearSession = true)
+        val sessions = ringSessionStore.getAll().toMutableList()
+        val previousTopSession = sessions.lastOrNull(AlarmRingSession::isActive)
+        val existingSession = sessions.lastOrNull { it.alarmId == alarmId }
+
+        if (previousTopSession != null && previousTopSession.alarmId != alarmId) {
+            val preparedSession = previousTopSession.preparedForPreemption()
+            if (preparedSession != previousTopSession) {
+                replaceSession(sessions, preparedSession)
+            }
+            AlarmSessionCoordinator.cancelMissionTimeout(
+                applicationContext,
+                previousTopSession.alarmId,
+            )
+        }
+
+        sessions.removeAll { it.alarmId == alarmId }
+
+        val alarm = alarmStore.get(alarmId)
+        if (alarm == null) {
+            persistSessions(sessions)
+            if (currentSession?.alarmId == alarmId) {
+                stopRingingFeedback()
+                currentSession = null
+                resumeNextActiveSessionOrStop()
+            } else if (currentSession == null) {
+                restoreIfNeeded()
+            }
             return
         }
 
@@ -88,16 +113,10 @@ class AlarmRingingService : Service() {
         AlarmSessionCoordinator.cancelMissionTimeout(applicationContext, alarmId)
         StepMissionTracker.stop()
 
-        val session = ringSessionStore.get()
-            ?.takeIf { it.alarmId == alarmId }
-            ?.resumeRinging()
-            ?: AlarmRingSession.create(alarm)
-
-        ringSessionStore.put(session)
-        currentSession = session
-        startForeground(NOTIFICATION_ID, buildNotification(session))
-        acquireWakeLock()
-        startFeedback()
+        val session = existingSession?.resumeRinging() ?: AlarmRingSession.create(alarm)
+        sessions.add(session)
+        persistSessions(sessions)
+        transitionToRingingSession(session)
     }
 
     private fun restoreIfNeeded() {
@@ -113,22 +132,21 @@ class AlarmRingingService : Service() {
         startFeedback()
     }
 
-    private fun dismissActiveAlarm(clearSession: Boolean = true) {
-        val activeAlarmId = currentSession?.alarmId ?: ringSessionStore.get()?.alarmId
-        stopFeedback()
-        wakeLock?.takeIf { it.isHeld }?.release()
-        wakeLock = null
-        activeAlarmId?.let { AlarmSessionCoordinator.cancelSnooze(applicationContext, it) }
-        activeAlarmId?.let {
-            AlarmSessionCoordinator.cancelMissionTimeout(applicationContext, it)
+    private fun dismissActiveAlarm() {
+        val session = currentSession ?: ringSessionStore.get()?.takeIf(AlarmRingSession::isActive) ?: run {
+            stopSelf()
+            return
         }
+
+        val sessions = ringSessionStore.getAll()
+            .filterNot { it.sessionId == session.sessionId }
+        persistSessions(sessions)
+        stopRingingFeedback()
+        AlarmSessionCoordinator.cancelSnooze(applicationContext, session.alarmId)
+        AlarmSessionCoordinator.cancelMissionTimeout(applicationContext, session.alarmId)
         StepMissionTracker.stop()
         currentSession = null
-        if (clearSession) {
-            ringSessionStore.clear()
-        }
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        resumeNextActiveSessionOrStop()
     }
 
     private fun snoozeActiveAlarm() {
@@ -147,12 +165,9 @@ class AlarmRingingService : Service() {
         AlarmSessionCoordinator.scheduleSnooze(applicationContext, updatedSession)
         AlarmSessionCoordinator.cancelMissionTimeout(applicationContext, session.alarmId)
         StepMissionTracker.stop()
-        stopFeedback()
-        wakeLock?.takeIf { it.isHeld }?.release()
-        wakeLock = null
+        stopRingingFeedback()
         currentSession = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        resumeNextActiveSessionOrStop()
     }
 
     private fun beginMission() {
@@ -172,11 +187,57 @@ class AlarmRingingService : Service() {
         } else {
             StepMissionTracker.stop()
         }
+        stopRingingFeedback()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun resumeNextActiveSessionOrStop() {
+        val nextSession = ringSessionStore.get()?.takeIf(AlarmRingSession::isActive)
+        if (nextSession == null) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+
+        AlarmSessionCoordinator.cancelMissionTimeout(applicationContext, nextSession.alarmId)
+        val resumedSession = nextSession.resumeRinging()
+        ringSessionStore.put(resumedSession)
+        transitionToRingingSession(resumedSession)
+    }
+
+    private fun transitionToRingingSession(session: AlarmRingSession) {
+        stopRingingFeedback()
+        currentSession = session
+        startForeground(NOTIFICATION_ID, buildNotification(session))
+        acquireWakeLock()
+        startFeedback()
+    }
+
+    private fun stopRingingFeedback() {
         stopFeedback()
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+    }
+
+    private fun persistSessions(sessions: List<AlarmRingSession>) {
+        if (sessions.isEmpty()) {
+            ringSessionStore.clear()
+            return
+        }
+        ringSessionStore.putAll(sessions)
+    }
+
+    private fun replaceSession(
+        sessions: MutableList<AlarmRingSession>,
+        updatedSession: AlarmRingSession,
+    ) {
+        val index = sessions.indexOfFirst { it.sessionId == updatedSession.sessionId }
+        if (index >= 0) {
+            sessions[index] = updatedSession
+        } else {
+            sessions.add(updatedSession)
+        }
     }
 
     private fun startFeedback() {

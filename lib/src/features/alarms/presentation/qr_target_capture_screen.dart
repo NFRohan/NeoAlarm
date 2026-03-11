@@ -53,6 +53,7 @@ class _QrTargetCaptureScreenState extends ConsumerState<QrTargetCaptureScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final primaryForeground = NeoColors.foregroundOn(NeoColors.primary);
     final isPermissionBlocked = _errorCode == 'camera_permission_missing';
     final isUnsupported = _errorCode == 'camera_unavailable';
 
@@ -75,7 +76,9 @@ class _QrTargetCaptureScreenState extends ConsumerState<QrTargetCaptureScreen>
                   Expanded(
                     child: Text(
                       'SCAN TARGET QR',
-                      style: theme.textTheme.titleLarge,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: primaryForeground,
+                      ),
                     ),
                   ),
                 ],

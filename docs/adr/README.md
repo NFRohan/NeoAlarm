@@ -47,3 +47,4 @@ Recommended sections:
 - [0008-direct-boot-safe-flutter-startup.md](0008-direct-boot-safe-flutter-startup.md)
 - [0009-event-driven-active-session-and-vision-lifecycle.md](0009-event-driven-active-session-and-vision-lifecycle.md)
 - [0010-performance-tooling-and-qr-dependency-tradeoff.md](0010-performance-tooling-and-qr-dependency-tradeoff.md)
+- [0011-overlapping-alarm-session-stack.md](0011-overlapping-alarm-session-stack.md)

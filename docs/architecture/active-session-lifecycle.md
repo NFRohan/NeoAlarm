@@ -23,11 +23,13 @@ Flutter renders the current state and sends user intents back to the Android ala
 - whether the alarm is snoozed
 - whether dismissal is allowed
 
-The persisted session in `RingSessionStore` is authoritative.
+The persisted session stack in `RingSessionStore` is authoritative.
+
+Only the top active session is rendered or rung at a time, but interrupted sessions may remain preserved underneath it until they resurface.
 
 ## Session States
 
-The session currently has three persisted states:
+Each live session currently has three persisted states:
 
 ### `ringing`
 
@@ -129,6 +131,23 @@ If no activity is registered for 30 seconds:
 
 Mission progress is preserved. Re-triggering is not a reset of the mission; it is a reset of the alarm noise.
 
+### 5A. Another Alarm Fires While One Is Already Active
+
+Overlapping alarms are handled as a preemptive stack, not as a single overwrite slot.
+
+When a newly fired alarm arrives while another session is still `ringing` or `mission_active`:
+
+1. native code preserves the interrupted top session in the session store instead of deleting it
+2. the interrupted session is normalized back to `ringing`
+3. any mission inactivity timeout for the interrupted session is canceled
+4. the newly fired alarm becomes the new top session and starts ringing
+
+Why the interrupted session is normalized back to `ringing`:
+
+- mission silence belongs only to the session that is currently on top and actively enforced
+- if an interrupted mission resurfaces later, it should make noise again rather than quietly resuming in the background
+- canceling its old inactivity timeout avoids stale timeout broadcasts reviving outdated session state
+
 ### Quiet Timer Visibility
 
 Flutter may show a quiet timer while the session is `mission_active`.
@@ -166,8 +185,9 @@ Dismissal is native-validated.
 On dismiss:
 
 - notification, audio, and vibration stop
-- snooze and inactivity timers are canceled
-- the persisted session is cleared
+- snooze and inactivity timers for the dismissed top session are canceled
+- only the dismissed top session is removed from the persisted session stack
+- if another active session remains underneath, it resumes ringing
 
 ## Recovery Model
 
@@ -189,6 +209,8 @@ Expected behavior:
 - reopening the app should return the user to the mission flow
 - the mission inactivity timer remains the native enforcement mechanism
 
+If multiple sessions are preserved, recovery restores only the current top active session into Flutter. Lower stacked sessions remain native-persisted until they surface.
+
 ### Device Time Events
 
 The active session is separate from alarm definition rescheduling.
@@ -209,8 +231,10 @@ That is why the Android activity checks whether a session is active, not only wh
 - inactivity re-triggering must be driven by native timers, not Flutter timers.
 - any quiet timer shown in Flutter must reflect the persisted native timeout deadline.
 - re-triggering must preserve mission progress.
+- overlapping alarms must preserve interrupted sessions instead of overwriting them.
+- resurfacing interrupted sessions must return to `ringing`, not silently re-enter `mission_active`.
 - mission activity must be mission-specific and must not be reducible to random pointer taps.
-- dismissing an active session must cancel both snooze and mission inactivity timers.
+- dismissing or snoozing the top session must cancel its own snooze and mission inactivity timers without destroying preserved lower sessions.
 - active-session recovery must work even if the app route stack is lost.
 
 ## Contributor Rules

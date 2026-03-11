@@ -91,6 +91,10 @@ class _QrMissionRunnerState extends ConsumerState<QrMissionRunner>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final statusBackground = _lastMismatchValue == null
+        ? NeoColors.warm
+        : NeoColors.orange;
+    final statusForeground = NeoColors.foregroundOn(statusBackground);
     final qrProgress = _qrProgress;
 
     if (qrProgress == null) {
@@ -217,16 +221,16 @@ class _QrMissionRunnerState extends ConsumerState<QrMissionRunner>
           ),
           const SizedBox(height: 14),
           NeoPanel(
-            color: _lastMismatchValue == null
-                ? NeoColors.warm
-                : NeoColors.orange,
+            color: statusBackground,
             borderWidth: 2,
             shadowOffset: const Offset(3, 3),
             child: Text(
               _lastMismatchValue == null
                   ? 'Waiting for a QR code...'
                   : 'Last code did not match: $_lastMismatchValue',
-              style: theme.textTheme.bodyMedium,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: statusForeground,
+              ),
             ),
           ),
         ],

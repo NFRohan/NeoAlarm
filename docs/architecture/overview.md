@@ -86,8 +86,9 @@ Dependency note:
 
 1. Android receives the alarm broadcast at the scheduled time.
 2. A native foreground service starts immediately.
-3. Audio, vibration, wakelock, and session persistence begin before Flutter UI is required.
-4. A full-screen alarm activity launches over the lock screen only when native session state confirms that an alarm is active.
+3. If another alarm session is already active, native code preserves it beneath the incoming session instead of overwriting it.
+4. Audio, vibration, wakelock, and session persistence begin before Flutter UI is required.
+5. A full-screen alarm activity launches over the lock screen only when native session state confirms that an alarm is active.
 
 ### Mission Completion
 
@@ -115,7 +116,11 @@ If the device reboots before first unlock, direct-boot-aware components can stil
 
 ## Active Session State Machine
 
-The current active session has three persisted states:
+NeoAlarm persists a stack of live ring sessions, not a single mutable slot.
+
+Only the top active session is rendered into Flutter or owned by the foreground ringing service at any given time. Older interrupted sessions remain persisted underneath it until they are resumed, snoozed, or dismissed.
+
+Each session still has three persisted states:
 
 - `ringing`: alarm audio and vibration are expected to be active
 - `mission_active`: the user explicitly started the mission, the alarm is silent, and inactivity is enforced by a native timer
@@ -124,6 +129,13 @@ The current active session has three persisted states:
 Mission inactivity is enforced natively. If a `mission_active` session goes idle for 30 seconds, the alarm re-enters `ringing` while preserving mission progress.
 
 The session also persists the current mission-timeout deadline so Flutter can render a quiet timer from native state instead of inventing a separate client-side countdown.
+
+If a second alarm fires while another is already active:
+
+- the newly fired alarm preempts the current top session
+- the interrupted session is normalized back to `ringing` and kept beneath the new one
+- its mission inactivity timeout is canceled so stale timers cannot resurrect it incorrectly
+- once the top alarm is dismissed or snoozed, the next preserved session resumes ringing
 
 See [active-session-lifecycle.md](active-session-lifecycle.md) for the full state machine and invariants.
 
@@ -135,6 +147,7 @@ See [active-session-lifecycle.md](active-session-lifecycle.md) for the full stat
 - Ring audio must start before any mission UI dependency is satisfied.
 - Alarm-only lock-screen/full-screen UI must depend on native active-session state, not on incoming intent claims alone.
 - Persisted alarm state and persisted ring-session state must be recoverable independently.
+- Overlapping alarms must preempt by preserving the interrupted session, never by overwriting it.
 - Local alarm and mission persistence must not be silently exported through Android auto-backup defaults in MVP.
 - Mission silence must not depend on a Flutter-only timer.
 - Live active-session UI must not depend on high-frequency polling of the full native session.

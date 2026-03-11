@@ -693,6 +693,38 @@ The benchmark emitted ten iteration-level Perfetto traces plus structured JSON b
 
 That changes the engineering story in an important way: NeoAlarm no longer relies only on source review and improvised shell checks for performance work. It has a repeatable measurement path that contributors can rerun and compare over time.
 
+## Concurrency Bug Snapshot: March 11, 2026
+
+The original ringing engine was implemented around a single persisted active session.
+
+That made the first end-to-end alarm flows easier to prove, but it also created a real correctness bug once overlapping alarms were considered.
+
+If one alarm was already active and another alarm fired before the first one had been dismissed, snoozed, or completed, the second alarm would overwrite the single stored session slot.
+
+That meant:
+
+- the newly fired alarm took over the UI and native ringing state
+- the interrupted alarm was not preserved as a first-class active item
+- an in-progress mission could effectively be stomped by the later alarm
+- mission-timeout or snooze state for the older alarm could still fire later in ways that no longer matched the user's visible session flow
+
+This is not just a missing convenience feature. It is a systems bug.
+
+An alarm engine has to define what happens when multiple alarms overlap. "Whichever alarm wrote the last session object" is not a defensible policy.
+
+That fix direction is now implemented.
+
+The engine now persists a stack of live sessions, preempts by pushing the newly fired alarm to the top, cancels the interrupted session's inactivity timer, and resumes the next preserved session once the top alarm is dismissed or snoozed.
+
+The chosen model is:
+
+- keep a stack of live ring sessions instead of a single slot
+- let a newly fired alarm preempt the current top session
+- preserve the interrupted session beneath it
+- resume the previous session once the top alarm is dismissed or snoozed
+
+That preserves correctness without pretending that overlapping alarms are rare enough to ignore.
+
 ## Security Audit Snapshot: March 11, 2026
 
 A source audit of the Android and Flutter codebase on March 11, 2026 found four issues worth recording before wider distribution.

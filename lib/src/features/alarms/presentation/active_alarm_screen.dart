@@ -41,6 +41,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final primaryForeground = NeoColors.foregroundOn(NeoColors.primary);
     final localizations = MaterialLocalizations.of(context);
     final formattedTime = localizations.formatTimeOfDay(
       TimeOfDay(hour: _session.hour, minute: _session.minute),
@@ -138,6 +139,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
                                     textAlign: TextAlign.center,
                                     style: theme.textTheme.displayLarge
                                         ?.copyWith(
+                                          color: primaryForeground,
                                           fontSize:
                                               MediaQuery.sizeOf(context).width >
                                                   420
@@ -149,7 +151,8 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
                                   Text(
                                     _session.alarmLabel.toUpperCase(),
                                     textAlign: TextAlign.center,
-                                    style: theme.textTheme.headlineLarge,
+                                    style: theme.textTheme.headlineLarge
+                                        ?.copyWith(color: primaryForeground),
                                   ),
                                   const SizedBox(height: 28),
                                   if (_session.showsMissionQuietTimer) ...[

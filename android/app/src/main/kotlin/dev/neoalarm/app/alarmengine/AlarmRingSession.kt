@@ -68,6 +68,9 @@ data class AlarmRingSession(
     val canSnooze: Boolean
         get() = snoozeCount < maxSnoozes
 
+    val isSnoozed: Boolean
+        get() = state == STATE_SNOOZED
+
     fun resumeRinging(nowEpochMillis: Long = System.currentTimeMillis()): AlarmRingSession {
         return copy(
             state = STATE_RINGING,
@@ -81,6 +84,17 @@ data class AlarmRingSession(
         return copy(
             state = STATE_MISSION_ACTIVE,
             missionTimeoutAtEpochMillis = missionTimeoutAtEpochMillis,
+        )
+    }
+
+    fun preparedForPreemption(): AlarmRingSession {
+        if (!isActive) {
+            return this
+        }
+
+        return copy(
+            state = STATE_RINGING,
+            missionTimeoutAtEpochMillis = null,
         )
     }
 

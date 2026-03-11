@@ -34,6 +34,7 @@ class StepsMissionRunner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final primaryForeground = NeoColors.foregroundOn(NeoColors.primary);
     final stepProgress = session.mission.stepProgress;
 
     if (stepProgress == null) {
@@ -108,7 +109,10 @@ class StepsMissionRunner extends StatelessWidget {
               children: [
                 Text(
                   '${stepProgress.completedSteps}/${stepProgress.targetSteps}',
-                  style: theme.textTheme.displayMedium?.copyWith(fontSize: 48),
+                  style: theme.textTheme.displayMedium?.copyWith(
+                    color: primaryForeground,
+                    fontSize: 48,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 ClipRRect(

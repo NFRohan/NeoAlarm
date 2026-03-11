@@ -75,19 +75,23 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      - name: Build debug APK
+      - name: Build debug APK for pull requests
+        if: github.event_name == 'pull_request'
         run: flutter build apk --debug
 
-      - name: Build release APK
+      - name: Build release verification APK for main and manual runs
+        if: github.event_name != 'pull_request'
         run: flutter build apk --release
 
       - name: Upload debug APK artifact
+        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v6
         with:
           name: neoalarm-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
 
       - name: Upload release verification APK artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v6
         with:
           name: neoalarm-release-verification-apk

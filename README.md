@@ -74,7 +74,7 @@ flowchart LR
     Coordinator --> Scheduler
     Vision --> Runtime
     MissionUI -->|"user intents only"| Runtime
-    SessionStore -->|"active session stream"| SessionStream
+    SessionStore -->|"top active session stream"| SessionStream
 ```
 
 ### Mission Execution Boundary
@@ -103,7 +103,9 @@ That keeps mission behavior reliable even if the app process is reclaimed or the
 
 ## Reliability Model
 
-NeoAlarm is built around a persisted active session with three states:
+NeoAlarm is built around a persisted stack of live ring sessions. Flutter renders only the current top active session, but native Android preserves interrupted sessions beneath it so overlapping alarms can preempt safely and then resume.
+
+Each live session still uses the same three persisted states:
 
 - `ringing`
 - `mission_active`
@@ -221,9 +223,8 @@ GitHub Actions currently provides:
 - `Android CI`
   - `flutter analyze`
   - `flutter test`
-  - debug APK build
-  - release APK verification build
-  - artifact upload
+  - pull requests: debug APK build + debug artifact upload
+  - `main` and manual runs: release verification APK build + artifact upload
 - `CodeQL`
   - source-level SAST for Android code and workflow code
 - `Dependency Review`

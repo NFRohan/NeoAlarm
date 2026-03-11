@@ -21,41 +21,21 @@ class ActiveAlarmScreen extends ConsumerStatefulWidget {
 }
 
 class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
-  static const _missionQuietWindow = Duration(seconds: 30);
-  static const _missionRefreshDelay = Duration(seconds: 31);
   static const _missionPingThrottle = Duration(seconds: 2);
-  static const _missionCountdownTick = Duration(milliseconds: 250);
 
-  Timer? _countdownTimer;
-  Timer? _missionRefreshTimer;
   DateTime? _lastMissionPingAt;
 
   ActiveAlarmSession get _session => widget.session;
 
   @override
-  void initState() {
-    super.initState();
-    _syncMissionTimers();
-  }
-
-  @override
   void didUpdateWidget(covariant ActiveAlarmScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_session.sessionId != oldWidget.session.sessionId ||
-        _session.state != oldWidget.session.state ||
-        _session.missionTimeoutAtUtc != oldWidget.session.missionTimeoutAtUtc) {
+        _session.state != oldWidget.session.state) {
       if (!_session.isMissionActive) {
         _lastMissionPingAt = null;
       }
-      _syncMissionTimers();
     }
-  }
-
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    _missionRefreshTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -174,8 +154,8 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
                                   const SizedBox(height: 28),
                                   if (_session.showsMissionQuietTimer) ...[
                                     _MissionQuietTimer(
-                                      remaining: _remainingMissionQuietTime,
-                                      total: _missionQuietWindow,
+                                      expiresAt:
+                                          _session.missionTimeoutAtLocal!,
                                     ),
                                     const SizedBox(height: 16),
                                   ],
@@ -188,7 +168,6 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
                                                 activeAlarmSessionControllerProvider,
                                               )
                                               .startMission();
-                                          _syncMissionTimers();
                                         });
                                       },
                                     )
@@ -306,44 +285,10 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
     return !_session.requiresMission || _session.awaitingMissionStart;
   }
 
-  Duration get _remainingMissionQuietTime {
-    final missionTimeoutAt = _session.missionTimeoutAtLocal;
-    if (missionTimeoutAt == null) {
-      return Duration.zero;
-    }
-
-    final remaining = missionTimeoutAt.difference(DateTime.now());
-    if (remaining.isNegative) {
-      return Duration.zero;
-    }
-    return remaining;
-  }
-
-  void _syncMissionTimers() {
-    _countdownTimer?.cancel();
-    _missionRefreshTimer?.cancel();
-    if (_session.isMissionActive) {
-      _countdownTimer = Timer.periodic(_missionCountdownTick, (_) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {});
-      });
-      _missionRefreshTimer = Timer(_missionRefreshDelay, () {
-        if (!mounted) {
-          return;
-        }
-        ref.read(activeAlarmSessionControllerProvider).refresh();
-      });
-    }
-  }
-
   Future<void> _registerMissionActivity() async {
     if (!_session.isMissionActive) {
       return;
     }
-
-    _syncMissionTimers();
 
     final now = DateTime.now();
     if (_lastMissionPingAt != null &&
@@ -381,18 +326,65 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
   }
 }
 
-class _MissionQuietTimer extends StatelessWidget {
-  const _MissionQuietTimer({required this.remaining, required this.total});
+class _MissionQuietTimer extends StatefulWidget {
+  const _MissionQuietTimer({required this.expiresAt});
 
-  final Duration remaining;
-  final Duration total;
+  final DateTime expiresAt;
+
+  @override
+  State<_MissionQuietTimer> createState() => _MissionQuietTimerState();
+}
+
+class _MissionQuietTimerState extends State<_MissionQuietTimer> {
+  static const _missionQuietWindow = Duration(seconds: 30);
+  static const _countdownTick = Duration(milliseconds: 250);
+
+  Timer? _countdownTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MissionQuietTimer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.expiresAt != oldWidget.expiresAt) {
+      _startTimer();
+    }
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(_countdownTick, (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  Duration get _remaining {
+    final remaining = widget.expiresAt.difference(DateTime.now());
+    if (remaining.isNegative) {
+      return Duration.zero;
+    }
+    return remaining;
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final remaining = _remaining;
     final remainingSeconds =
         remaining.inSeconds + (remaining.inMilliseconds % 1000 == 0 ? 0 : 1);
-    final totalMillis = total.inMilliseconds;
+    final totalMillis = _missionQuietWindow.inMilliseconds;
     final remainingFraction = totalMillis == 0
         ? 0.0
         : (remaining.inMilliseconds / totalMillis).clamp(0.0, 1.0);

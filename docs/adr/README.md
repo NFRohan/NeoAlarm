@@ -45,3 +45,4 @@ Recommended sections:
 - [0006-security-hardening-and-release-pipeline.md](0006-security-hardening-and-release-pipeline.md)
 - [0007-direct-boot-alarm-persistence.md](0007-direct-boot-alarm-persistence.md)
 - [0008-direct-boot-safe-flutter-startup.md](0008-direct-boot-safe-flutter-startup.md)
+- [0009-event-driven-active-session-and-vision-lifecycle.md](0009-event-driven-active-session-and-vision-lifecycle.md)

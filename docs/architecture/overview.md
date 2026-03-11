@@ -51,6 +51,7 @@ Current note:
 
 - Math progress is native-authored and Flutter-rendered
 - Steps progress is driven by native `TYPE_STEP_DETECTOR` events
+- Active-session UI updates are streamed from the native session store instead of being polled from Flutter on a short interval
 
 ### Vision Pipeline
 
@@ -61,6 +62,8 @@ The pipeline is native-first:
 - CameraX provides preview and image analysis
 - analyzers consume frames
 - Flutter receives analyzer results and mission-state updates
+- identical vision-session restarts are treated idempotently instead of forcing unnecessary camera rebinds
+- camera analysis resources are disposed explicitly when the host activity is destroyed
 
 This keeps the QR mission fast today and makes future on-device object detection a swap of analyzer implementation rather than a rebuild of the camera stack.
 
@@ -85,8 +88,9 @@ This keeps the QR mission fast today and makes future on-device object detection
 2. The user explicitly starts the mission, which transitions the session into `mission_active`.
 3. Native code persists the current mission timeout deadline and exposes it to Flutter for the quiet-timer UI.
 4. The mission driver reports only mission-valid activity back to the native layer.
-5. Native session logic validates progress, dismissal, snooze rules, and inactivity re-triggering.
-5. The service stops only after a successful dismiss path.
+5. Native session changes are streamed back to Flutter so mission UI can react without high-frequency polling.
+6. Native session logic validates progress, dismissal, snooze rules, and inactivity re-triggering.
+7. The service stops only after a successful dismiss path.
 
 For current missions, the activity contract is mission-specific:
 
@@ -126,11 +130,13 @@ See [active-session-lifecycle.md](active-session-lifecycle.md) for the full stat
 - Persisted alarm state and persisted ring-session state must be recoverable independently.
 - Local alarm and mission persistence must not be silently exported through Android auto-backup defaults in MVP.
 - Mission silence must not depend on a Flutter-only timer.
+- Live active-session UI must not depend on high-frequency polling of the full native session.
 - Mission silence must depend on mission-valid activity, not generic taps anywhere on the screen.
 - A mission may be silent only while the native session is actively enforcing user engagement.
 - If Flutter shows a quiet timer, it must be derived from the persisted native deadline.
 - Mission implementations must not mutate scheduler behavior directly.
 - Vision missions must depend on analyzer results, not raw cross-platform frame transport.
+- Vision resources must have an explicit lifecycle end instead of relying on process teardown.
 
 ## Non-Goals For V1
 

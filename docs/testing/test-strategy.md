@@ -73,6 +73,7 @@ Cover:
 - bridge contracts between Flutter and native Android
 - create, update, enable, disable, and delete alarm flows
 - active `RingSession` query and recovery handoff
+- active-session event streaming from native persistence into Flutter
 - mission state transitions that cross the Flutter/native boundary
 - mission activity signaling and inactivity re-trigger contract
 - quiet-timer deadline propagation from native session state into Flutter UI
@@ -133,6 +134,7 @@ Cover:
 - quiet-timer accuracy during math input and step activity
 - random taps not extending math mission silence
 - activity-recognition revoked during an active steps mission
+- repeated QR permission recovery or app resume not causing scanner churn or camera-session breakage
 - OEM-specific battery optimization problems
 
 Target at least:
@@ -175,6 +177,8 @@ Minimum post-minification checklist:
 - create, edit, enable, and disable alarms
 - let an alarm fire and confirm the ringing service, notification, and full-screen alarm UI still work
 - complete at least one mission flow for each implemented mission type
+- verify that steps progress and active mission-state updates still arrive in real time without visible polling lag
+- verify that valid mission activity does not leave a restarted foreground service behind just to refresh the quiet timer
 - confirm service teardown after mission completion or dismiss
 - inspect `adb logcat` for release-only failures such as `ClassNotFoundException`, `NoSuchMethodError`, plugin registration failures, or unexpected permission/security exceptions
 - inspect `dumpsys activity services` or equivalent state to confirm no ringing service is left behind after completion

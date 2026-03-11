@@ -46,6 +46,7 @@ class _QrMissionRunnerState extends ConsumerState<QrMissionRunner>
   String? _errorCode;
   String? _errorMessage;
   String? _lastMismatchValue;
+  String? _activeTargetValue;
   bool _scannerReady = false;
 
   String? get _targetValue => widget.session.mission.spec.qrTargetValue;
@@ -236,11 +237,21 @@ class _QrMissionRunnerState extends ConsumerState<QrMissionRunner>
   Future<void> _startMissionSession() async {
     final targetValue = _targetValue;
     if (targetValue == null) {
+      _activeTargetValue = null;
       await ref.read(visionControllerProvider).stopSession();
       return;
     }
 
+    final alreadyTrackingTarget =
+        _activeTargetValue == targetValue &&
+        _scannerReady &&
+        _errorCode == null;
+    if (alreadyTrackingTarget) {
+      return;
+    }
+
     setState(() {
+      _activeTargetValue = targetValue;
       _scannerReady = false;
       _errorCode = null;
       _errorMessage = null;
@@ -260,6 +271,7 @@ class _QrMissionRunnerState extends ConsumerState<QrMissionRunner>
         return;
       }
       setState(() {
+        _activeTargetValue = targetValue;
         _scannerReady = false;
         _errorCode = error.code;
         _errorMessage = error.message;
@@ -287,6 +299,7 @@ class _QrMissionRunnerState extends ConsumerState<QrMissionRunner>
     switch (event.type) {
       case VisionEventType.ready:
         setState(() {
+          _activeTargetValue = _targetValue;
           _scannerReady = true;
           _errorCode = null;
           _errorMessage = null;
@@ -295,6 +308,7 @@ class _QrMissionRunnerState extends ConsumerState<QrMissionRunner>
         return;
       case VisionEventType.qrMismatch:
         setState(() {
+          _activeTargetValue = _targetValue;
           _scannerReady = true;
           _lastMismatchValue = event.rawValue;
           _errorCode = null;

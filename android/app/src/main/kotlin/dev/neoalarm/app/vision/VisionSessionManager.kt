@@ -15,6 +15,7 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import dev.neoalarm.app.alarmengine.AlarmSessionCoordinator
 import dev.neoalarm.app.alarmengine.AlarmRingingService
 import dev.neoalarm.app.alarmengine.MissionSpec
 import dev.neoalarm.app.alarmengine.QrMissionTrackingState
@@ -40,14 +41,19 @@ class VisionSessionManager(
     private val isProcessingFrame = AtomicBoolean(false)
 
     private var cameraProvider: ProcessCameraProvider? = null
+    private var boundConfig: VisionSessionConfig? = null
     private var eventSink: EventChannel.EventSink? = null
     private var previewView: PreviewView? = null
     private var sessionConfig: VisionSessionConfig? = null
     private var lastMissionActivityValue: String? = null
     private var lastEmittedValue: String? = null
     private var lastEmittedAtEpochMillis = 0L
+    private var disposed = false
 
     fun attachPreviewView(previewView: PreviewView) {
+        if (disposed) {
+            return
+        }
         this.previewView = previewView
         bindIfPossible()
     }
@@ -62,8 +68,11 @@ class VisionSessionManager(
     }
 
     fun startQrRegistration() {
-        sessionConfig = VisionSessionConfig(mode = VisionSessionMode.QR_REGISTRATION)
-        resetSessionSignals()
+        val nextConfig = VisionSessionConfig(mode = VisionSessionMode.QR_REGISTRATION)
+        if (sessionConfig != nextConfig) {
+            sessionConfig = nextConfig
+            resetSessionSignals()
+        }
         bindIfPossible()
     }
 
@@ -71,11 +80,14 @@ class VisionSessionManager(
         val normalizedTargetValue = MissionSpec.normalizeQrTargetValue(targetValue)
             ?: throw IllegalArgumentException("QR target value is required.")
 
-        sessionConfig = VisionSessionConfig(
+        val nextConfig = VisionSessionConfig(
             mode = VisionSessionMode.QR_MISSION,
             expectedTargetValue = normalizedTargetValue,
         )
-        resetSessionSignals()
+        if (sessionConfig != nextConfig) {
+            sessionConfig = nextConfig
+            resetSessionSignals()
+        }
         bindIfPossible()
     }
 
@@ -83,6 +95,14 @@ class VisionSessionManager(
         sessionConfig = null
         resetSessionSignals()
         unbindCamera()
+    }
+
+    fun dispose() {
+        disposed = true
+        stopSession()
+        eventSink = null
+        barcodeScanner.close()
+        cameraExecutor.shutdownNow()
     }
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
@@ -94,6 +114,9 @@ class VisionSessionManager(
     }
 
     private fun bindIfPossible() {
+        if (disposed) {
+            return
+        }
         val activeConfig = sessionConfig ?: return
 
         if (!appContext.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
@@ -122,11 +145,38 @@ class VisionSessionManager(
         }
 
         val resolvedPreviewView = previewView ?: return
+        if (cameraProvider != null &&
+            boundConfig == activeConfig &&
+            this.previewView === resolvedPreviewView
+        ) {
+            emitEvent(
+                mapOf(
+                    "type" to EVENT_READY,
+                    "mode" to activeConfig.mode.id,
+                ),
+            )
+            return
+        }
 
         val providerFuture = ProcessCameraProvider.getInstance(appContext)
         providerFuture.addListener(
             {
+                if (disposed || sessionConfig != activeConfig || previewView !== resolvedPreviewView) {
+                    return@addListener
+                }
                 val provider = providerFuture.get()
+                if (cameraProvider === provider &&
+                    boundConfig == activeConfig &&
+                    previewView === resolvedPreviewView
+                ) {
+                    emitEvent(
+                        mapOf(
+                            "type" to EVENT_READY,
+                            "mode" to activeConfig.mode.id,
+                        ),
+                    )
+                    return@addListener
+                }
                 cameraProvider = provider
                 provider.unbindAll()
 
@@ -147,6 +197,7 @@ class VisionSessionManager(
                     preview,
                     analysis,
                 )
+                boundConfig = activeConfig
 
                 emitEvent(
                     mapOf(
@@ -227,7 +278,7 @@ class VisionSessionManager(
 
                 if (rawValue != lastMissionActivityValue) {
                     lastMissionActivityValue = rawValue
-                    AlarmRingingService.registerMissionActivity(appContext)
+                    AlarmSessionCoordinator.extendMissionTimeout(appContext)
                 }
 
                 emitIfDistinct(
@@ -302,6 +353,7 @@ class VisionSessionManager(
     private fun unbindCamera() {
         cameraProvider?.unbindAll()
         cameraProvider = null
+        boundConfig = null
     }
 
     private fun isCameraPermissionGranted(): Boolean {

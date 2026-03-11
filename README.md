@@ -27,6 +27,8 @@ The project currently has:
 - activity-recognition gating in the editor plus settings-based repair/re-enable flow
 - quiet-timer countdown UI sourced from the persisted native mission timeout
 - exploit hardening so only mission-valid activity can keep a mission silent
+- event-driven active-session updates from native Android into Flutter
+- idempotent QR camera session startup with explicit native vision cleanup
 
 ## Release Signing
 

@@ -1,6 +1,5 @@
 package dev.neoalarm.app.alarmengine
 
-import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -25,7 +24,6 @@ import dev.neoalarm.app.MainActivity
 class AlarmRingingService : Service() {
     private lateinit var alarmStore: AlarmStore
     private lateinit var ringSessionStore: RingSessionStore
-    private lateinit var alarmManager: AlarmManager
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var ringtone: Ringtone? = null
@@ -35,7 +33,6 @@ class AlarmRingingService : Service() {
         super.onCreate()
         alarmStore = AlarmStore(applicationContext)
         ringSessionStore = RingSessionStore(applicationContext)
-        alarmManager = getSystemService(AlarmManager::class.java)
         ensureNotificationChannel()
     }
 
@@ -67,11 +64,6 @@ class AlarmRingingService : Service() {
                 START_NOT_STICKY
             }
 
-            ACTION_REGISTER_MISSION_ACTIVITY -> {
-                registerMissionActivity()
-                START_NOT_STICKY
-            }
-
             else -> {
                 restoreIfNeeded()
                 if (currentSession == null) START_NOT_STICKY else START_STICKY
@@ -92,8 +84,8 @@ class AlarmRingingService : Service() {
             return
         }
 
-        cancelSnooze(alarmId)
-        cancelMissionTimeout(alarmId)
+        AlarmSessionCoordinator.cancelSnooze(applicationContext, alarmId)
+        AlarmSessionCoordinator.cancelMissionTimeout(applicationContext, alarmId)
         StepMissionTracker.stop()
 
         val session = ringSessionStore.get()
@@ -126,8 +118,10 @@ class AlarmRingingService : Service() {
         stopFeedback()
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
-        activeAlarmId?.let(::cancelSnooze)
-        activeAlarmId?.let(::cancelMissionTimeout)
+        activeAlarmId?.let { AlarmSessionCoordinator.cancelSnooze(applicationContext, it) }
+        activeAlarmId?.let {
+            AlarmSessionCoordinator.cancelMissionTimeout(applicationContext, it)
+        }
         StepMissionTracker.stop()
         currentSession = null
         if (clearSession) {
@@ -150,8 +144,8 @@ class AlarmRingingService : Service() {
         val triggerAt = System.currentTimeMillis() + session.snoozeDurationMinutes * 60_000L
         val updatedSession = session.snoozedUntil(triggerAt)
         ringSessionStore.put(updatedSession)
-        scheduleSnooze(updatedSession)
-        cancelMissionTimeout(session.alarmId)
+        AlarmSessionCoordinator.scheduleSnooze(applicationContext, updatedSession)
+        AlarmSessionCoordinator.cancelMissionTimeout(applicationContext, session.alarmId)
         StepMissionTracker.stop()
         stopFeedback()
         wakeLock?.takeIf { it.isHeld }?.release()
@@ -171,34 +165,17 @@ class AlarmRingingService : Service() {
             return
         }
 
-        val missionTimeoutAt = System.currentTimeMillis() + MISSION_INACTIVITY_TIMEOUT_MS
-        val updatedSession = session.activateMission(missionTimeoutAt)
-        ringSessionStore.put(updatedSession)
+        val updatedSession = AlarmSessionCoordinator.activateMission(applicationContext, session)
         currentSession = updatedSession
         if (updatedSession.mission.spec.type == MissionSpec.TYPE_STEPS) {
             StepMissionTracker.ensureRunning(applicationContext, updatedSession)
         } else {
             StepMissionTracker.stop()
         }
-        scheduleMissionTimeout(updatedSession)
         stopFeedback()
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
         stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
-    }
-
-    private fun registerMissionActivity() {
-        val session = ringSessionStore.get()?.takeIf(AlarmRingSession::isMissionActive) ?: run {
-            stopSelf()
-            return
-        }
-
-        val missionTimeoutAt = System.currentTimeMillis() + MISSION_INACTIVITY_TIMEOUT_MS
-        val updatedSession = session.withMissionTimeout(missionTimeoutAt)
-        ringSessionStore.put(updatedSession)
-        currentSession = updatedSession
-        scheduleMissionTimeout(updatedSession)
         stopSelf()
     }
 
@@ -340,15 +317,12 @@ class AlarmRingingService : Service() {
         private const val CHANNEL_ID = "active_alarm"
         private const val NOTIFICATION_ID = 42001
         private const val EXTRA_ALARM_ID = "alarm_id"
-        private const val MISSION_INACTIVITY_TIMEOUT_MS = 30_000L
         private const val WAKE_LOCK_TIMEOUT_MS = 30 * 60 * 1000L
         const val ACTION_SHOW_ACTIVE_ALARM = "dev.neoalarm.app.SHOW_ACTIVE_ALARM"
         private const val ACTION_START = "dev.neoalarm.app.START_ACTIVE_ALARM"
         private const val ACTION_DISMISS = "dev.neoalarm.app.DISMISS_ACTIVE_ALARM"
         private const val ACTION_SNOOZE = "dev.neoalarm.app.SNOOZE_ACTIVE_ALARM"
         private const val ACTION_BEGIN_MISSION = "dev.neoalarm.app.BEGIN_MISSION"
-        private const val ACTION_REGISTER_MISSION_ACTIVITY =
-            "dev.neoalarm.app.REGISTER_MISSION_ACTIVITY"
 
         fun start(context: Context, alarmId: String) {
             ContextCompat.startForegroundService(
@@ -383,69 +357,6 @@ class AlarmRingingService : Service() {
                 },
             )
         }
-
-        fun registerMissionActivity(context: Context) {
-            context.startService(
-                Intent(context, AlarmRingingService::class.java).apply {
-                    action = ACTION_REGISTER_MISSION_ACTIVITY
-                },
-            )
-        }
-    }
-
-    private fun scheduleSnooze(session: AlarmRingSession) {
-        val triggerAt = session.nextSnoozeAtEpochMillis ?: return
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            triggerAt,
-            buildSnoozeOperation(session.alarmId),
-        )
-    }
-
-    private fun cancelSnooze(alarmId: String) {
-        alarmManager.cancel(buildSnoozeOperation(alarmId))
-    }
-
-    private fun scheduleMissionTimeout(session: AlarmRingSession) {
-        val triggerAt = session.missionTimeoutAtEpochMillis
-            ?: System.currentTimeMillis() + MISSION_INACTIVITY_TIMEOUT_MS
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            triggerAt,
-            buildMissionTimeoutOperation(session.alarmId),
-        )
-    }
-
-    private fun cancelMissionTimeout(alarmId: String) {
-        alarmManager.cancel(buildMissionTimeoutOperation(alarmId))
-    }
-
-    private fun buildSnoozeOperation(alarmId: String): PendingIntent {
-        val intent = Intent(this, AlarmReceiver::class.java).apply {
-            putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
-            putExtra(AlarmReceiver.EXTRA_IS_SNOOZE, true)
-        }
-
-        return PendingIntent.getBroadcast(
-            this,
-            "$alarmId:snooze".hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-    }
-
-    private fun buildMissionTimeoutOperation(alarmId: String): PendingIntent {
-        val intent = Intent(this, AlarmReceiver::class.java).apply {
-            putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
-            putExtra(AlarmReceiver.EXTRA_IS_MISSION_TIMEOUT, true)
-        }
-
-        return PendingIntent.getBroadcast(
-            this,
-            "$alarmId:mission_timeout".hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
     }
 }
 

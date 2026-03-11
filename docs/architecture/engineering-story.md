@@ -307,6 +307,108 @@ If QR is implemented as a disposable plugin tied to one screen, future object-re
 
 That keeps v1 practical while making future TinyML or TFLite work a matter of swapping analyzers, not redesigning ownership.
 
+## Optimization Audit Snapshot: March 11, 2026
+
+By the end of Sprint 7, the product behavior was strong enough that the next engineering question was no longer "does it work?" but "does it work efficiently under stress?"
+
+That matters for an alarm app because the runtime is not idle while the user is sleeping or racing to dismiss an alarm. The system is doing real-time work at the worst possible moment:
+
+- sensor-driven mission progress
+- silent-mission inactivity enforcement
+- camera analysis
+- active session recovery and repainting while the screen is on
+
+An optimization audit on March 11, 2026 identified five issues worth recording before the implementation changed.
+
+### 1. Steps Progress Was Polling The Entire Active Session Too Frequently
+
+The first version of the steps mission refreshed the full active alarm session from Flutter four times per second.
+
+That was acceptable as a bootstrap because it kept the UI simple and let the native steps mission prove itself quickly. It was not a good long-term shape:
+
+- every poll crossed the method channel
+- every poll re-read persisted native session data
+- every poll rebuilt more Flutter state than the step counter actually needed
+
+This was the clearest signal that the active-session model needed a push path, not just a query path.
+
+### 2. Quiet-Timer Refreshes Were Using Service Churn For A Small State Update
+
+Mission activity updates were routed back through the ringing service even when the only real work was:
+
+- extend the mission timeout deadline
+- persist the updated session
+- reschedule the timeout alarm
+
+That meant "user is still solving the mission" could wake service lifecycle machinery that was really designed for audio ownership and ringing transitions.
+
+This was the wrong boundary. Extending a deadline is engine state management, not a foreground-service concern.
+
+### 3. The Active Alarm Screen Was Repainting Too Much For The Quiet Timer
+
+The visible quiet timer was useful, but the initial implementation refreshed the whole active alarm screen several times per second.
+
+That is a poor trade:
+
+- the timer itself is tiny
+- the screen around it is visually heavy
+- mission widgets do not need to rebuild just because a countdown ticked
+
+The timer needed to become a local repaint surface rather than a reason to rebuild the whole ringing UI.
+
+### 4. Vision Session Startup Was Too Eager To Rebind Camera Resources
+
+The QR mission runner and native vision manager were both biased toward "start again just to be safe."
+
+That is understandable during early camera work, but it creates extra churn:
+
+- repeated preview/session startup on resume and widget update
+- repeated provider rebinds even when the active config did not actually change
+- unnecessary latency during permission recovery and scanner resume
+
+The intended architecture was already session-based. The implementation needed to become idempotent enough to match that model.
+
+### 5. Vision Resources Needed An Explicit Lifecycle End
+
+The first vision implementation stopped scanning, but it did not yet make strong guarantees about releasing every long-lived native resource when the activity or engine was torn down.
+
+For a real alarm app, that is not a minor cleanup item. Camera analyzers, executors, and scanner clients are exactly the sort of resources that look harmless until enough retries, resumes, or activity recreation events accumulate.
+
+The audit therefore treated explicit disposal as part of correctness, not just memory hygiene.
+
+### What This Audit Means
+
+The main lesson was that reliability and performance were converging on the same engineering rule:
+
+- the native alarm engine should own state transitions cheaply
+- Flutter should repaint only the parts that actually changed
+- mission progress should move by events when the system already knows something changed
+- camera resources should behave like owned session resources, not convenient globals
+
+The optimization pass that follows this audit is therefore not about micro-benchmarks. It is about bringing the implementation into line with the architecture the project already claims to have.
+
+### Optimization Response
+
+The implementation pass that followed this audit made five structural changes.
+
+First, active-session propagation became event-driven instead of relying on high-frequency Flutter polling. Native session persistence now emits active-session updates to Flutter, which means the UI can react to real state changes rather than repeatedly asking for the whole session just to move a steps counter.
+
+Second, mission-activity timeout refreshes were pulled out of the ringing service and into a dedicated native coordinator. Extending the silent-mission deadline is now treated as a small state-and-scheduling update instead of a reason to spin up foreground-service lifecycle work.
+
+Third, the visible quiet timer stayed in the product, but its repaint scope became local. The timer still updates smoothly, but it no longer forces the entire active-alarm surface to rebuild several times per second.
+
+Fourth, the QR mission startup path became idempotent. Re-entering the same camera mission configuration now reuses the existing session when possible instead of rebinding preview and analysis just because Flutter resumed or rebuilt a mission widget.
+
+Fifth, the vision pipeline gained an explicit disposal path. Camera analysis resources, scanner state, and executor ownership now end with the activity lifecycle instead of relying on process cleanup as a hidden resource-management strategy.
+
+These changes matter because they improve three things at once:
+
+- battery and CPU behavior while an alarm is active
+- UI smoothness during live missions
+- contributor clarity about where state changes are supposed to happen
+
+That combination is the real goal of the optimization work. The project should feel faster because the architecture became tighter, not because the code accumulated isolated performance tricks.
+
 ## Security Audit Snapshot: March 11, 2026
 
 A source audit of the Android and Flutter codebase on March 11, 2026 found four issues worth recording before wider distribution.

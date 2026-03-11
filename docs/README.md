@@ -33,6 +33,7 @@ This project treats documentation as part of the engineering surface, not as a c
 - [testing/test-strategy.md](testing/test-strategy.md)
 - [planning/sprint-plan.md](planning/sprint-plan.md)
 - [adr/0006-security-hardening-and-release-pipeline.md](adr/0006-security-hardening-and-release-pipeline.md)
+- [adr/0009-event-driven-active-session-and-vision-lifecycle.md](adr/0009-event-driven-active-session-and-vision-lifecycle.md)
 
 ### I want to implement or review alarm delivery behavior
 
@@ -44,17 +45,20 @@ This project treats documentation as part of the engineering surface, not as a c
 - [adr/0006-security-hardening-and-release-pipeline.md](adr/0006-security-hardening-and-release-pipeline.md)
 - [adr/0007-direct-boot-alarm-persistence.md](adr/0007-direct-boot-alarm-persistence.md)
 - [adr/0008-direct-boot-safe-flutter-startup.md](adr/0008-direct-boot-safe-flutter-startup.md)
+- [adr/0009-event-driven-active-session-and-vision-lifecycle.md](adr/0009-event-driven-active-session-and-vision-lifecycle.md)
 
 ### I want to work on QR or future vision missions
 
 - [adr/0002-native-vision-mission-pipeline.md](adr/0002-native-vision-mission-pipeline.md)
 - [architecture/overview.md](architecture/overview.md)
+- [adr/0009-event-driven-active-session-and-vision-lifecycle.md](adr/0009-event-driven-active-session-and-vision-lifecycle.md)
 
 ### I want to work on sensor missions or mission anti-cheat
 
 - [architecture/active-session-lifecycle.md](architecture/active-session-lifecycle.md)
 - [contributing/mission-authoring.md](contributing/mission-authoring.md)
 - [adr/0005-detector-driven-steps-and-mission-activity-policy.md](adr/0005-detector-driven-steps-and-mission-activity-policy.md)
+- [adr/0009-event-driven-active-session-and-vision-lifecycle.md](adr/0009-event-driven-active-session-and-vision-lifecycle.md)
 
 ### I want to add a new architectural decision
 

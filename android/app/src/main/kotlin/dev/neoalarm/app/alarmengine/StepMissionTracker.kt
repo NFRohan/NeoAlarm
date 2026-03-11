@@ -101,11 +101,8 @@ object StepMissionTracker {
                     ?.coerceAtLeast(1)
                     ?: 1
                 val updatedMission = currentSession.mission.recordDetectedStep(detectedStepCount)
-                if (updatedMission != currentSession.mission) {
-                    store.put(currentSession.withMission(updatedMission))
-                }
-
-                AlarmRingingService.registerMissionActivity(appContext)
+                val updatedSession = currentSession.withMission(updatedMission)
+                AlarmSessionCoordinator.extendMissionTimeout(appContext, updatedSession)
 
                 if (updatedMission.isDismissAllowed) {
                     stop()

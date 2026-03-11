@@ -146,7 +146,7 @@ class AlarmEngineMethodCallHandler(
                         if (session.mission.spec.type == MissionSpec.TYPE_STEPS) {
                             StepMissionTracker.ensureRunning(appContext, session)
                         }
-                        AlarmRingingService.registerMissionActivity(appContext)
+                        AlarmSessionCoordinator.extendMissionTimeout(appContext, session)
                     }
                     result.success(null)
                 }
@@ -168,8 +168,10 @@ class AlarmEngineMethodCallHandler(
                         MathAnswerSubmissionResult.ADVANCED,
                         MathAnswerSubmissionResult.INCORRECT,
                         -> {
-                            ringSessionStore.put(session.withMission(updatedMission))
-                            AlarmRingingService.registerMissionActivity(appContext)
+                            AlarmSessionCoordinator.extendMissionTimeout(
+                                appContext,
+                                session.withMission(updatedMission),
+                            )
                         }
                     }
 

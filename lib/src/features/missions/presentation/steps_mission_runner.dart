@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:neoalarm/src/core/theme/app_theme.dart';
 import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
 import 'package:neoalarm/src/features/alarms/domain/active_alarm_session.dart';
@@ -23,7 +21,7 @@ class StepsMissionDriver implements MissionDriver {
   }
 }
 
-class StepsMissionRunner extends StatefulWidget {
+class StepsMissionRunner extends StatelessWidget {
   const StepsMissionRunner({
     required this.session,
     required this.actions,
@@ -34,33 +32,9 @@ class StepsMissionRunner extends StatefulWidget {
   final MissionActionCallbacks actions;
 
   @override
-  State<StepsMissionRunner> createState() => _StepsMissionRunnerState();
-}
-
-class _StepsMissionRunnerState extends State<StepsMissionRunner> {
-  static const _sessionRefreshInterval = Duration(milliseconds: 250);
-
-  Timer? _refreshTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.actions.refreshSession();
-    _refreshTimer = Timer.periodic(_sessionRefreshInterval, (_) {
-      widget.actions.refreshSession();
-    });
-  }
-
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final stepProgress = widget.session.mission.stepProgress;
+    final stepProgress = session.mission.stepProgress;
 
     if (stepProgress == null) {
       return NeoPanel(
@@ -91,7 +65,7 @@ class _StepsMissionRunnerState extends State<StepsMissionRunner> {
               expand: true,
               backgroundColor: NeoColors.cyan,
               onPressed: () async {
-                await widget.actions.requestActivityRecognitionPermission();
+                await actions.requestActivityRecognitionPermission();
               },
             ),
           ],

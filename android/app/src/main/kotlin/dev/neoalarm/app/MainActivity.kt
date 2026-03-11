@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import dev.neoalarm.app.alarmengine.AlarmEngineMethodCallHandler
 import dev.neoalarm.app.alarmengine.AlarmRingingService
+import dev.neoalarm.app.alarmengine.ActiveSessionStreamHandler
 import dev.neoalarm.app.alarmengine.RingSessionStore
 import dev.neoalarm.app.vision.VisionMethodCallHandler
 import dev.neoalarm.app.vision.VisionPreviewPlatformViewFactory
@@ -16,6 +17,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private lateinit var visionSessionManager: VisionSessionManager
+    private lateinit var activeSessionStreamHandler: ActiveSessionStreamHandler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,6 +35,13 @@ class MainActivity : FlutterActivity() {
         syncAlarmWindowState()
     }
 
+    override fun onDestroy() {
+        if (::visionSessionManager.isInitialized) {
+            visionSessionManager.dispose()
+        }
+        super.onDestroy()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -40,6 +49,7 @@ class MainActivity : FlutterActivity() {
             context = applicationContext,
             lifecycleOwner = this,
         )
+        activeSessionStreamHandler = ActiveSessionStreamHandler(applicationContext)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -55,6 +65,11 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "dev.neoalarm.app.vision",
         ).setMethodCallHandler(VisionMethodCallHandler(visionSessionManager))
+
+        EventChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "dev.neoalarm.app.alarm_engine/active_session",
+        ).setStreamHandler(activeSessionStreamHandler)
 
         EventChannel(
             flutterEngine.dartExecutor.binaryMessenger,

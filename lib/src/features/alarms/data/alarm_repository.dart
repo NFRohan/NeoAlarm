@@ -24,6 +24,8 @@ abstract class AlarmRepository {
 
   Future<ActiveAlarmSession?> getActiveAlarmSession();
 
+  Stream<ActiveAlarmSession?> watchActiveAlarmSession();
+
   Future<void> dismissActiveAlarmSession();
 
   Future<void> snoozeActiveAlarmSession();

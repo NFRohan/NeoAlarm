@@ -10,6 +10,9 @@ class NativeAlarmRepository implements AlarmRepository {
   const NativeAlarmRepository();
 
   static const _channel = MethodChannel('dev.neoalarm.app.alarm_engine');
+  static const _sessionChannel = EventChannel(
+    'dev.neoalarm.app.alarm_engine/active_session',
+  );
 
   @override
   Future<AlarmEngineStatus> getStatus() async {
@@ -36,6 +39,18 @@ class NativeAlarmRepository implements AlarmRepository {
     }
 
     return ActiveAlarmSession.fromMap(raw);
+  }
+
+  @override
+  Stream<ActiveAlarmSession?> watchActiveAlarmSession() async* {
+    yield await getActiveAlarmSession();
+    yield* _sessionChannel.receiveBroadcastStream().map((event) {
+      if (event == null) {
+        return null;
+      }
+
+      return ActiveAlarmSession.fromMap(event as Map<Object?, Object?>);
+    });
   }
 
   @override

@@ -45,7 +45,6 @@ class _AlarmAppShellState extends ConsumerState<_AlarmAppShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.invalidate(appStartupContextProvider);
-      ref.read(activeAlarmSessionControllerProvider).refresh();
     }
   }
 

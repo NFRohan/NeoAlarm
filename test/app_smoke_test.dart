@@ -122,6 +122,11 @@ class _FakeAlarmRepository implements AlarmRepository {
   }
 
   @override
+  Stream<ActiveAlarmSession?> watchActiveAlarmSession() {
+    return Stream<ActiveAlarmSession?>.value(null);
+  }
+
+  @override
   Future<void> requestActivityRecognitionPermission() async {}
 
   @override

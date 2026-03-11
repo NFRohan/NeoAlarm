@@ -38,7 +38,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.invalidate(alarmEngineStatusProvider);
-      ref.invalidate(alarmListControllerProvider);
+      if (_selectedTab == _DashboardTab.alarms) {
+        ref.invalidate(alarmListControllerProvider);
+      }
     }
   }
 

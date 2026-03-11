@@ -35,7 +35,15 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
+          cache: false
+
+      - name: Restore Dart package cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.pub-cache
+          key: pub-cache-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            pub-cache-${{ runner.os }}-
 
       - name: Materialize signing files when release secrets are present
         env:

@@ -121,6 +121,9 @@ Run before beta and release candidates.
 
 Cover:
 
+- first-run onboarding appears before the dashboard until the flow is completed or skipped
+- onboarding completion persists across app restarts
+- rerunning onboarding from Settings returns the app to the setup flow
 - overnight Doze behavior
 - reboot recovery
 - reboot recovery before first unlock
@@ -150,6 +153,11 @@ Target at least:
 - one aggressive OEM device family
 
 This is the only layer that can honestly support reliability claims for an alarm product.
+
+Current validation status:
+
+- reboot recovery has been validated on-device
+- Doze resilience has been validated on-device
 
 Direct-boot note:
 

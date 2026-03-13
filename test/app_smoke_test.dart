@@ -6,6 +6,7 @@ import 'package:neoalarm/src/features/alarms/domain/alarm_engine_status.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_mission.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
 import 'package:neoalarm/src/features/app_startup/domain/app_startup_context.dart';
+import 'package:neoalarm/src/features/onboarding/application/onboarding_controller.dart';
 import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +15,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUp(() {
+    SharedPreferences.setMockInitialValues({
+      OnboardingController.completionKey: true,
+    });
+  });
+
+  testWidgets('shows onboarding on first unlocked launch', (tester) async {
     SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          alarmRepositoryProvider.overrideWithValue(_FakeAlarmRepository()),
+        ],
+        child: const AlarmApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('GET NEOALARM READY'), findsOneWidget);
+    expect(find.text('START SETUP'), findsOneWidget);
+    expect(find.text('NeoAlarm'), findsNothing);
   });
 
   testWidgets('renders dashboard shell', (tester) async {
@@ -49,6 +70,34 @@ void main() {
 
     expect(find.text('DIRECT BOOT MODE'), findsOneWidget);
     expect(find.textContaining('Unlock the device'), findsOneWidget);
+  });
+
+  testWidgets('finishes onboarding into the dashboard shell', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          alarmRepositoryProvider.overrideWithValue(_FakeAlarmRepository()),
+        ],
+        child: const AlarmApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('START SETUP'));
+    await tester.tap(find.text('START SETUP'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('CONTINUE'));
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('OPEN ALARMS'));
+    await tester.tap(find.text('OPEN ALARMS'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('NeoAlarm'), findsOneWidget);
   });
 
   testWidgets('system back from settings returns to home shell', (

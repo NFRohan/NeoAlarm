@@ -99,7 +99,10 @@ class AlarmScheduler(
         val showIntent = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java).apply {
+            Intent()
+                .setClass(context, MainActivity::class.java)
+                .setPackage(context.packageName)
+                .apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
@@ -116,7 +119,10 @@ class AlarmScheduler(
     }
 
     private fun buildAlarmOperation(id: String): PendingIntent {
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
+        val intent = Intent()
+            .setClass(context, AlarmReceiver::class.java)
+            .setPackage(context.packageName)
+            .apply {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, id)
         }
 

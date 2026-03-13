@@ -3,6 +3,8 @@ import 'package:neoalarm/src/features/alarms/application/active_alarm_session_co
 import 'package:neoalarm/src/features/alarms/presentation/active_alarm_screen.dart';
 import 'package:neoalarm/src/features/app_startup/application/app_startup_controller.dart';
 import 'package:neoalarm/src/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:neoalarm/src/features/onboarding/application/onboarding_controller.dart';
+import 'package:neoalarm/src/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:neoalarm/src/features/settings/application/theme_mode_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,7 +70,17 @@ class _AlarmAppShellState extends ConsumerState<_AlarmAppShell>
               return const _DirectBootScreen();
             }
 
-            return const DashboardScreen();
+            final onboarding = ref.watch(onboardingControllerProvider);
+            return onboarding.when(
+              data: (onboardingState) {
+                if (onboardingState.needsOnboarding) {
+                  return const OnboardingScreen();
+                }
+                return const DashboardScreen();
+              },
+              loading: () => const _AppLoadingScreen(),
+              error: (error, stackTrace) => const DashboardScreen(),
+            );
           },
           loading: () => const _AppLoadingScreen(),
           error: (error, stackTrace) {

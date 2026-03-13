@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:neoalarm/src/core/theme/app_theme.dart';
 import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
 import 'package:neoalarm/src/features/alarms/application/alarm_list_controller.dart';
+import 'package:neoalarm/src/features/alarms/domain/alarm_countdown_formatter.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_engine_status.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
 import 'package:neoalarm/src/features/alarms/presentation/alarm_editor_sheet.dart';
+import 'package:neoalarm/src/features/onboarding/application/onboarding_controller.dart';
 import 'package:neoalarm/src/features/settings/application/theme_mode_controller.dart';
 import 'package:neoalarm/src/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/material.dart';
@@ -22,15 +26,22 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen>
     with WidgetsBindingObserver {
   _DashboardTab _selectedTab = _DashboardTab.alarms;
+  Timer? _countdownTicker;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _countdownTicker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
+    _countdownTicker?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -85,6 +96,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                   key: const ValueKey('alarms-tab'),
                   alarms: alarms,
                   engineStatus: engineStatus,
+                  nextAlarmCountdownText: _nextAlarmCountdownText(
+                    alarms.asData?.value ?? const [],
+                  ),
                   onRequestExactAlarmPermission: () {
                     _requestExactAlarmPermission(context);
                   },
@@ -132,6 +146,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                   },
                   onRequestActivityRecognitionPermission: () {
                     _requestActivityRecognitionPermission(context);
+                  },
+                  onRunOnboarding: () async {
+                    await ref
+                        .read(onboardingControllerProvider.notifier)
+                        .resetOnboarding();
                   },
                 ),
         ),
@@ -274,6 +293,7 @@ class _AlarmDashboardPage extends StatelessWidget {
   const _AlarmDashboardPage({
     required this.alarms,
     required this.engineStatus,
+    required this.nextAlarmCountdownText,
     required this.onRequestExactAlarmPermission,
     required this.onRequestNotificationPermission,
     required this.onOpenSettings,
@@ -285,6 +305,7 @@ class _AlarmDashboardPage extends StatelessWidget {
 
   final AsyncValue<List<AlarmSpec>> alarms;
   final AsyncValue<AlarmEngineStatus> engineStatus;
+  final String? nextAlarmCountdownText;
   final VoidCallback onRequestExactAlarmPermission;
   final VoidCallback onRequestNotificationPermission;
   final VoidCallback onOpenSettings;
@@ -298,7 +319,10 @@ class _AlarmDashboardPage extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 112),
         children: [
-          _DashboardHeader(onOpenSettings: onOpenSettings),
+          _DashboardHeader(
+            onOpenSettings: onOpenSettings,
+            countdownText: nextAlarmCountdownText,
+          ),
           const SizedBox(height: 18),
           _PermissionBannerRow(
             engineStatus: engineStatus,
@@ -321,9 +345,13 @@ class _AlarmDashboardPage extends StatelessWidget {
 }
 
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.onOpenSettings});
+  const _DashboardHeader({
+    required this.onOpenSettings,
+    required this.countdownText,
+  });
 
   final VoidCallback onOpenSettings;
+  final String? countdownText;
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +372,7 @@ class _DashboardHeader extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Exact alarms. No ads. No cloud.',
+                countdownText ?? 'Exact alarms. No ads. No cloud.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: NeoColors.subtext,
                 ),
@@ -746,4 +774,28 @@ String _weekdayLabel(int weekday) {
     DateTime.sunday => 'Sun',
     _ => '',
   };
+}
+
+String? _nextAlarmCountdownText(List<AlarmSpec> alarms) {
+  final soonestAlarm = alarms
+      .where((alarm) => alarm.enabled && alarm.nextTriggerAtLocal != null)
+      .fold<AlarmSpec?>(
+        null,
+        (currentSoonest, alarm) {
+          if (currentSoonest == null) {
+            return alarm;
+          }
+
+          final currentTrigger = currentSoonest.nextTriggerAtLocal!;
+          final nextTrigger = alarm.nextTriggerAtLocal!;
+          return nextTrigger.isBefore(currentTrigger) ? alarm : currentSoonest;
+        },
+      );
+
+  final trigger = soonestAlarm?.nextTriggerAtLocal;
+  if (trigger == null) {
+    return null;
+  }
+
+  return formatAlarmCountdown(trigger, prefix: 'Next alarm in');
 }

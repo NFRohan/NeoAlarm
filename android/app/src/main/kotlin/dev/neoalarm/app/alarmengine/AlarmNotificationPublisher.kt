@@ -24,7 +24,10 @@ class AlarmNotificationPublisher(private val context: Context) {
                 PendingIntent.getActivity(
                     context,
                     record.id.hashCode(),
-                    Intent(context, MainActivity::class.java).apply {
+                    Intent()
+                        .setClass(context, MainActivity::class.java)
+                        .setPackage(context.packageName)
+                        .apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     },
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

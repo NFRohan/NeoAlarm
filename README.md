@@ -40,6 +40,7 @@ Implemented today:
 - snooze duration and max-snooze limits
 - active ring-session recovery after process death
 - diagnostics and permission repair flows
+- first-run onboarding flow for exact alarms, notifications, and battery optimization
 - math mission with configurable difficulty and problem count
 - steps mission with `TYPE_STEP_DETECTOR` progress and cadence filtering
 - QR mission backed by a reusable native vision pipeline
@@ -76,6 +77,7 @@ Implemented today:
 - Local-first: no backend, no account, no ads, no subscription model
 - Native authority: dismissal, ringing, scheduling, and recovery stay on Android-native code
 - Honest anti-cheat: mission silence is conditional and enforced by native state
+- Permission discipline: first-run onboarding covers alarm-critical Android controls, while mission-specific permissions stay contextual
 - Extensible architecture: new missions should plug into the platform without rewriting the scheduler
 
 ## Architecture
@@ -153,6 +155,7 @@ Key guarantees:
 - ringing starts natively before any mission UI is required
 - mission-active silence is temporary and enforced by native inactivity timers
 - reboot recovery works from device-protected storage, including `LOCKED_BOOT_COMPLETED`
+- reboot and Doze resilience have both been validated on-device
 - lock-screen/full-screen alarm UI is authorized by persisted active-session state, not by a forgeable intent action
 
 For the full model, read [docs/architecture/active-session-lifecycle.md](docs/architecture/active-session-lifecycle.md).

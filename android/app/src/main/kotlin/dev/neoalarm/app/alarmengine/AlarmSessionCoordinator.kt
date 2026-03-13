@@ -69,7 +69,10 @@ object AlarmSessionCoordinator {
     }
 
     private fun buildSnoozeOperation(context: Context, alarmId: String): PendingIntent {
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
+        val intent = Intent()
+            .setClass(context, AlarmReceiver::class.java)
+            .setPackage(context.packageName)
+            .apply {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
             putExtra(AlarmReceiver.EXTRA_IS_SNOOZE, true)
         }
@@ -83,7 +86,10 @@ object AlarmSessionCoordinator {
     }
 
     private fun buildMissionTimeoutOperation(context: Context, alarmId: String): PendingIntent {
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
+        val intent = Intent()
+            .setClass(context, AlarmReceiver::class.java)
+            .setPackage(context.packageName)
+            .apply {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
             putExtra(AlarmReceiver.EXTRA_IS_MISSION_TIMEOUT, true)
         }

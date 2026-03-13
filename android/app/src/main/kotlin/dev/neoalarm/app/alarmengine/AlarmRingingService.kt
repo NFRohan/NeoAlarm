@@ -312,10 +312,13 @@ class AlarmRingingService : Service() {
     }
 
     private fun buildNotification(session: AlarmRingSession): Notification {
-        val launchIntent = Intent(this, MainActivity::class.java).apply {
-            action = ACTION_SHOW_ACTIVE_ALARM
-            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
+        val launchIntent = Intent()
+            .setClass(this, MainActivity::class.java)
+            .setPackage(packageName)
+            .apply {
+                action = ACTION_SHOW_ACTIVE_ALARM
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
 
         val launchPendingIntent = PendingIntent.getActivity(
             this,

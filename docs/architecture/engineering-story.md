@@ -20,6 +20,20 @@ An alarm app has to survive:
 
 For those reasons, the app uses Flutter as the shell and native Android as the execution core.
 
+That architecture is no longer only theoretical. The current build has already been validated on-device for both reboot recovery and Doze resilience, which is the threshold where the native split starts paying for itself.
+
+## Why Onboarding Is A Reliability Feature, Not A Marketing Screen
+
+Android alarm reliability is gated by system controls that most users do not understand by name:
+
+- exact alarm access
+- notification access
+- battery optimization policy
+
+Leaving those buried in Settings creates a product smell where the app technically supports reliable alarms but asks the user to infer the setup order themselves. NeoAlarm now treats first-run onboarding as part of the reliability surface. The guided flow walks the user through the alarm-critical controls first, then hands off to the main dashboard.
+
+Mission permissions follow a different rule. Camera and activity recognition are not alarm-global prerequisites, so they stay contextual. The app only asks for them when the user configures or runs a mission that actually needs them. That keeps onboarding focused on what makes the alarm engine trustworthy without front-loading irrelevant prompts.
+
 ## Why This Is A Dart And Kotlin Split, Not A Plugin Grab Bag
 
 The project is not split between Dart and Kotlin because "some things were easier native."

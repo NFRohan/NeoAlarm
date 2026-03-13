@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:neoalarm/src/core/theme/app_theme.dart';
 import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
+import 'package:neoalarm/src/features/alarms/domain/alarm_countdown_formatter.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_mission.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_engine_status.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
@@ -43,6 +46,7 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
   late int _snoozeDurationMinutes;
   late int _maxSnoozes;
   late MissionSpec _mission;
+  Timer? _countdownTicker;
 
   @override
   void initState() {
@@ -55,10 +59,16 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
     _snoozeDurationMinutes = widget.alarm.snoozeDurationMinutes;
     _maxSnoozes = widget.alarm.maxSnoozes;
     _mission = widget.alarm.mission;
+    _countdownTicker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
+    _countdownTicker?.cancel();
     _labelController.dispose();
     super.dispose();
   }
@@ -82,6 +92,7 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
         _mission.type,
     ];
     final amPmLabel = _time.period == DayPeriod.am ? 'AM' : 'PM';
+    final alarmPreviewText = _alarmPreviewCountdownText();
 
     return FractionallySizedBox(
       heightFactor: 0.96,
@@ -134,26 +145,38 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
                 ),
                 child: InkWell(
                   onTap: _pickTime,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Column(
                     children: [
-                      _TimeBlock(
-                        label: _time.hourOfPeriod.toString().padLeft(2, '0'),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(':', style: theme.textTheme.displayMedium),
-                      ),
-                      _TimeBlock(
-                        label: _time.minute.toString().padLeft(2, '0'),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _PeriodChip(label: 'AM', active: amPmLabel == 'AM'),
-                          const SizedBox(height: 8),
-                          _PeriodChip(label: 'PM', active: amPmLabel == 'PM'),
+                          _TimeBlock(
+                            label: _time.hourOfPeriod.toString().padLeft(2, '0'),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(':', style: theme.textTheme.displayMedium),
+                          ),
+                          _TimeBlock(
+                            label: _time.minute.toString().padLeft(2, '0'),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            children: [
+                              _PeriodChip(label: 'AM', active: amPmLabel == 'AM'),
+                              const SizedBox(height: 8),
+                              _PeriodChip(label: 'PM', active: amPmLabel == 'PM'),
+                            ],
+                          ),
                         ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        alarmPreviewText,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: NeoColors.subtext,
+                        ),
                       ),
                     ],
                   ),
@@ -529,6 +552,7 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
     final selected = await _AlarmTimePickerSheet.show(
       context,
       initialTime: _time,
+      countdownText: _alarmPreviewCountdownText(),
     );
 
     if (selected == null) {
@@ -538,6 +562,15 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
     setState(() {
       _time = selected;
     });
+  }
+
+  String _alarmPreviewCountdownText() {
+    final nextTrigger = computeNextAlarmPreview(
+      hour: _time.hour,
+      minute: _time.minute,
+      weekdays: _selectedWeekdays,
+    );
+    return formatAlarmCountdown(nextTrigger);
   }
 
   void _save() {
@@ -628,13 +661,18 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
 }
 
 class _AlarmTimePickerSheet extends StatefulWidget {
-  const _AlarmTimePickerSheet({required this.initialTime});
+  const _AlarmTimePickerSheet({
+    required this.initialTime,
+    required this.countdownText,
+  });
 
   final TimeOfDay initialTime;
+  final String countdownText;
 
   static Future<TimeOfDay?> show(
     BuildContext context, {
     required TimeOfDay initialTime,
+    required String countdownText,
   }) {
     return showModalBottomSheet<TimeOfDay>(
       context: context,
@@ -642,7 +680,10 @@ class _AlarmTimePickerSheet extends StatefulWidget {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.68),
-      builder: (context) => _AlarmTimePickerSheet(initialTime: initialTime),
+      builder: (context) => _AlarmTimePickerSheet(
+        initialTime: initialTime,
+        countdownText: countdownText,
+      ),
     );
   }
 
@@ -657,6 +698,7 @@ class _AlarmTimePickerSheetState extends State<_AlarmTimePickerSheet> {
   late final FixedExtentScrollController _hourController;
   late final FixedExtentScrollController _minuteController;
   late final FixedExtentScrollController _periodController;
+  Timer? _countdownTicker;
 
   @override
   void initState() {
@@ -671,10 +713,16 @@ class _AlarmTimePickerSheetState extends State<_AlarmTimePickerSheet> {
     _periodController = FixedExtentScrollController(
       initialItem: _selectedPeriod == DayPeriod.am ? 0 : 1,
     );
+    _countdownTicker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
+    _countdownTicker?.cancel();
     _hourController.dispose();
     _minuteController.dispose();
     _periodController.dispose();
@@ -687,6 +735,13 @@ class _AlarmTimePickerSheetState extends State<_AlarmTimePickerSheet> {
     final localizations = MaterialLocalizations.of(context);
     final mediaQuery = MediaQuery.of(context);
     final selectedTime = _selectedTime;
+    final countdownText = formatAlarmCountdown(
+      computeNextAlarmPreview(
+        hour: selectedTime.hour,
+        minute: selectedTime.minute,
+        weekdays: const [],
+      ),
+    );
 
     return FractionallySizedBox(
       heightFactor: 0.7,
@@ -737,6 +792,13 @@ class _AlarmTimePickerSheetState extends State<_AlarmTimePickerSheet> {
                             style: theme.textTheme.displaySmall?.copyWith(
                               color: NeoColors.accentInk,
                               fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            countdownText,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: NeoColors.accentInk,
                             ),
                           ),
                         ],

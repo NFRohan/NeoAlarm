@@ -15,6 +15,7 @@ class SettingsScreen extends StatelessWidget {
     required this.onRequestBatteryOptimizationExemption,
     required this.onRequestCameraPermission,
     required this.onRequestActivityRecognitionPermission,
+    required this.onRunOnboarding,
     super.key,
   });
 
@@ -27,6 +28,7 @@ class SettingsScreen extends StatelessWidget {
   final VoidCallback onRequestBatteryOptimizationExemption;
   final VoidCallback onRequestCameraPermission;
   final VoidCallback onRequestActivityRecognitionPermission;
+  final Future<void> Function() onRunOnboarding;
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +98,8 @@ class SettingsScreen extends StatelessWidget {
             onSetDarkModeEnabled: onSetDarkModeEnabled,
           ),
           const SizedBox(height: 18),
+          _SetupFlowSection(onRunOnboarding: onRunOnboarding),
+          const SizedBox(height: 18),
           _AlarmReadinessCard(status: status),
           const SizedBox(height: 18),
           _DeviceDiagnosticsSection(
@@ -107,6 +111,63 @@ class SettingsScreen extends StatelessWidget {
             onRequestCameraPermission: onRequestCameraPermission,
             onRequestActivityRecognitionPermission:
                 onRequestActivityRecognitionPermission,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SetupFlowSection extends StatelessWidget {
+  const _SetupFlowSection({required this.onRunOnboarding});
+
+  final Future<void> Function() onRunOnboarding;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return NeoPanel(
+      color: NeoColors.panel,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: NeoColors.primary,
+              border: Border.all(color: NeoColors.ink, width: 2),
+            ),
+            child: const Icon(
+              Icons.rocket_launch,
+              size: 24,
+              color: NeoColors.accentInk,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Setup flow', style: theme.textTheme.headlineMedium),
+                const SizedBox(height: 6),
+                Text(
+                  'Replay the first-run onboarding to walk through alarm-critical Android controls in order.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: NeoColors.subtext,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          NeoActionButton(
+            label: 'Run again',
+            compact: true,
+            onPressed: () {
+              onRunOnboarding();
+            },
           ),
         ],
       ),

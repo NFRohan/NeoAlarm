@@ -17,6 +17,8 @@ void main() {
         AlarmWeekday.friday,
       ],
       ringtone: AlarmRingtone.systemNotification,
+      volumeRampEnabled: true,
+      extraLoudEnabled: true,
       snoozeDurationMinutes: 9,
       maxSnoozes: 3,
       mission: const MissionSpec.math(
@@ -24,6 +26,7 @@ void main() {
         problemCount: 4,
       ),
       nextTriggerAtUtc: DateTime.utc(2026, 3, 12, 1, 30),
+      skippedOccurrenceLocalDate: '2026-03-14',
     );
 
     final roundTrip = AlarmSpec.fromMap(original.toMap());
@@ -36,6 +39,8 @@ void main() {
     expect(roundTrip.enabled, isTrue);
     expect(roundTrip.weekdays, original.weekdays);
     expect(roundTrip.ringtone, original.ringtone);
+    expect(roundTrip.volumeRampEnabled, isTrue);
+    expect(roundTrip.extraLoudEnabled, isTrue);
     expect(roundTrip.mission.type, original.mission.type);
     expect(roundTrip.mission.mathDifficulty, original.mission.mathDifficulty);
     expect(
@@ -43,6 +48,10 @@ void main() {
       original.mission.mathProblemCount,
     );
     expect(roundTrip.nextTriggerAtUtc, original.nextTriggerAtUtc);
+    expect(
+      roundTrip.skippedOccurrenceLocalDate,
+      original.skippedOccurrenceLocalDate,
+    );
   });
 
   test('uses one-time summary when no weekdays are selected', () {
@@ -61,10 +70,13 @@ void main() {
       enabled: true,
       weekdays: const [],
       ringtone: AlarmRingtone.systemAlarm,
+      volumeRampEnabled: false,
+      extraLoudEnabled: false,
       snoozeDurationMinutes: 5,
       maxSnoozes: 1,
       mission: const MissionSpec.steps(goal: 50),
       nextTriggerAtUtc: null,
+      skippedOccurrenceLocalDate: null,
     );
 
     final roundTrip = AlarmSpec.fromMap(original.toMap());
@@ -83,10 +95,13 @@ void main() {
       enabled: true,
       weekdays: const [],
       ringtone: AlarmRingtone.systemAlarm,
+      volumeRampEnabled: false,
+      extraLoudEnabled: false,
       snoozeDurationMinutes: 9,
       maxSnoozes: 0,
       mission: const MissionSpec.qr(targetValue: 'sink-qr-target'),
       nextTriggerAtUtc: null,
+      skippedOccurrenceLocalDate: null,
     );
 
     final roundTrip = AlarmSpec.fromMap(original.toMap());
@@ -94,5 +109,14 @@ void main() {
     expect(roundTrip.mission.type, AlarmMissionType.qr);
     expect(roundTrip.mission.qrTargetValue, 'sink-qr-target');
     expect(roundTrip.mission.hasQrTarget, isTrue);
+  });
+
+  test('defaults new drafts to full-volume playback without skip state', () {
+    final alarm = AlarmSpec.createDraft(timezoneId: 'UTC');
+
+    expect(alarm.volumeRampEnabled, isFalse);
+    expect(alarm.extraLoudEnabled, isFalse);
+    expect(alarm.skippedOccurrenceLocalDate, isNull);
+    expect(alarm.volumeSummary, 'Full volume');
   });
 }

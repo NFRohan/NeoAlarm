@@ -858,3 +858,14 @@ Strong documentation should answer:
 - which decisions are already settled
 
 If the answer to those questions lives only in source code, the project will slow down as soon as the first non-trivial feature lands.
+
+## Playback And Everyday Usability
+
+Once the core alarm engine and mission model were stable, the next meaningful improvements were not more architectural stunts. They were everyday alarm behaviors that had to be implemented without weakening the guarantees the engine already had.
+
+Two decisions shaped that work:
+
+- `Skip next` is represented as a concrete skipped local occurrence date, not a boolean flag. That keeps recurrence behavior deterministic across reboot, timezone change, and reschedule events.
+- gradual volume ramp moved the alarm playback path away from `Ringtone` and toward a controllable `MediaPlayer` instance so the app can ramp the active playback instance without treating the user's global alarm volume casually by default.
+
+That playback migration also solves a practical OEM issue. On some devices, especially after reboot before first unlock, the user's default alarm tone cannot be treated as a reliable dependency. The alarm engine now prefers a bundled direct-boot-safe fallback tone in that state and returns to the user's normal tone path after unlock.

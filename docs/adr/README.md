@@ -48,3 +48,5 @@ Recommended sections:
 - [0009-event-driven-active-session-and-vision-lifecycle.md](0009-event-driven-active-session-and-vision-lifecycle.md)
 - [0010-performance-tooling-and-qr-dependency-tradeoff.md](0010-performance-tooling-and-qr-dependency-tradeoff.md)
 - [0011-overlapping-alarm-session-stack.md](0011-overlapping-alarm-session-stack.md)
+- [0012-mediaplayer-ramp-and-direct-boot-fallback.md](0012-mediaplayer-ramp-and-direct-boot-fallback.md)
+- [0013-extra-loud-speaker-only-mode.md](0013-extra-loud-speaker-only-mode.md)

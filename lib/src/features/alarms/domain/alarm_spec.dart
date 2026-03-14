@@ -61,10 +61,13 @@ class AlarmSpec {
     required this.enabled,
     required this.weekdays,
     required this.ringtone,
+    required this.volumeRampEnabled,
+    required this.extraLoudEnabled,
     required this.snoozeDurationMinutes,
     required this.maxSnoozes,
     required this.mission,
     required this.nextTriggerAtUtc,
+    required this.skippedOccurrenceLocalDate,
   });
 
   factory AlarmSpec.createDraft({required String timezoneId, DateTime? now}) {
@@ -79,10 +82,13 @@ class AlarmSpec {
       enabled: true,
       weekdays: const [],
       ringtone: AlarmRingtone.systemAlarm,
+      volumeRampEnabled: false,
+      extraLoudEnabled: false,
       snoozeDurationMinutes: 9,
       maxSnoozes: 3,
       mission: const MissionSpec.none(),
       nextTriggerAtUtc: null,
+      skippedOccurrenceLocalDate: null,
     );
   }
 
@@ -106,6 +112,8 @@ class AlarmSpec {
       enabled: raw['enabled']! as bool,
       weekdays: weekdaysRaw,
       ringtone: AlarmRingtone.fromId(raw['ringtoneId'] as String?),
+      volumeRampEnabled: raw['volumeRampEnabled'] as bool? ?? false,
+      extraLoudEnabled: raw['extraLoudEnabled'] as bool? ?? false,
       snoozeDurationMinutes: (raw['snoozeDurationMinutes'] as num).toInt(),
       maxSnoozes: (raw['maxSnoozes'] as num).toInt(),
       mission: MissionSpec.fromMap(
@@ -115,6 +123,7 @@ class AlarmSpec {
       nextTriggerAtUtc: nextTriggerValue == null
           ? null
           : DateTime.parse(nextTriggerValue as String).toUtc(),
+      skippedOccurrenceLocalDate: raw['skippedOccurrenceLocalDate'] as String?,
     );
   }
 
@@ -126,10 +135,13 @@ class AlarmSpec {
   final bool enabled;
   final List<AlarmWeekday> weekdays;
   final AlarmRingtone ringtone;
+  final bool volumeRampEnabled;
+  final bool extraLoudEnabled;
   final int snoozeDurationMinutes;
   final int maxSnoozes;
   final MissionSpec mission;
   final DateTime? nextTriggerAtUtc;
+  final String? skippedOccurrenceLocalDate;
 
   DateTime? get nextTriggerAtLocal => nextTriggerAtUtc?.toLocal();
 
@@ -147,6 +159,16 @@ class AlarmSpec {
 
   String get missionSummary => mission.summary;
 
+  String get volumeSummary {
+    final labels = <String>[
+      if (volumeRampEnabled) 'Ramp up' else 'Full volume',
+      if (extraLoudEnabled) 'Extra loud',
+    ];
+    return labels.join(' · ');
+  }
+
+  bool get hasSkippedOccurrence => skippedOccurrenceLocalDate != null;
+
   AlarmSpec copyWith({
     String? id,
     String? label,
@@ -156,10 +178,14 @@ class AlarmSpec {
     bool? enabled,
     List<AlarmWeekday>? weekdays,
     AlarmRingtone? ringtone,
+    bool? volumeRampEnabled,
+    bool? extraLoudEnabled,
     int? snoozeDurationMinutes,
     int? maxSnoozes,
     MissionSpec? mission,
     DateTime? nextTriggerAtUtc,
+    String? skippedOccurrenceLocalDate,
+    bool clearSkippedOccurrenceLocalDate = false,
     bool clearNextTriggerAtUtc = false,
   }) {
     final normalizedWeekdays = [...?weekdays]
@@ -174,6 +200,8 @@ class AlarmSpec {
       enabled: enabled ?? this.enabled,
       weekdays: weekdays == null ? this.weekdays : normalizedWeekdays,
       ringtone: ringtone ?? this.ringtone,
+      volumeRampEnabled: volumeRampEnabled ?? this.volumeRampEnabled,
+      extraLoudEnabled: extraLoudEnabled ?? this.extraLoudEnabled,
       snoozeDurationMinutes:
           snoozeDurationMinutes ?? this.snoozeDurationMinutes,
       maxSnoozes: maxSnoozes ?? this.maxSnoozes,
@@ -181,6 +209,9 @@ class AlarmSpec {
       nextTriggerAtUtc: clearNextTriggerAtUtc
           ? null
           : nextTriggerAtUtc ?? this.nextTriggerAtUtc,
+      skippedOccurrenceLocalDate: clearSkippedOccurrenceLocalDate
+          ? null
+          : skippedOccurrenceLocalDate ?? this.skippedOccurrenceLocalDate,
     );
   }
 
@@ -194,10 +225,13 @@ class AlarmSpec {
       'enabled': enabled,
       'weekdays': weekdays.map((weekday) => weekday.isoValue).toList(),
       'ringtoneId': ringtone.id,
+      'volumeRampEnabled': volumeRampEnabled,
+      'extraLoudEnabled': extraLoudEnabled,
       'snoozeDurationMinutes': snoozeDurationMinutes,
       'maxSnoozes': maxSnoozes,
       'mission': mission.toMap(),
       'nextTriggerAtUtc': nextTriggerAtUtc?.toIso8601String(),
+      'skippedOccurrenceLocalDate': skippedOccurrenceLocalDate,
     };
   }
 }

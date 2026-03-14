@@ -21,6 +21,10 @@ Direct-boot note:
 
 Owns alarm definitions, repeat rules, snooze policy, mission configuration, and next-fire computation semantics.
 
+Current note:
+
+- repeating alarms can skip exactly one occurrence by storing a concrete skipped local occurrence date instead of a generic boolean flag
+
 ### Android Alarm Engine
 
 Owns:
@@ -29,6 +33,8 @@ Owns:
 - boot/time/timezone reschedule handling, including `LOCKED_BOOT_COMPLETED`
 - active ring session state
 - foreground ringing service
+- `MediaPlayer` alarm playback, per-alarm ramp handling, and direct-boot-safe fallback tone selection
+- conservative speaker-only `LoudnessEnhancer` support for opt-in extra loud alarms
 - wake handling and lock-screen launch
 
 Security note:
@@ -143,8 +149,10 @@ See [active-session-lifecycle.md](active-session-lifecycle.md) for the full stat
 
 - Alarm delivery must not depend on a live Flutter isolate.
 - Reboot recovery before first unlock must depend on device-protected alarm/session persistence, not credential-protected defaults.
+- Pre-unlock alarm audio must have a direct-boot-safe fallback path rather than assuming the user's default tone can be resolved before first unlock.
 - Flutter startup before first unlock must stay minimal and must not assume arbitrary plugin initialization is safe.
 - Ring audio must start before any mission UI dependency is satisfied.
+- If gradual volume ramp is enabled, it must be enforced natively and must not leave any temporary stream-volume floor behind after the session ends.
 - Alarm-only lock-screen/full-screen UI must depend on native active-session state, not on incoming intent claims alone.
 - Persisted alarm state and persisted ring-session state must be recoverable independently.
 - Overlapping alarms must preempt by preserving the interrupted session, never by overwriting it.

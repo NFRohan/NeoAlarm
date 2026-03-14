@@ -240,6 +240,16 @@ class _FakeAlarmRepository implements AlarmRepository {
   }
 
   @override
+  Future<AlarmSpec> skipNextOccurrence(String id) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<AlarmSpec> clearSkippedOccurrence(String id) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<AlarmSpec> upsertAlarm(AlarmSpec alarm) async {
     return alarm;
   }

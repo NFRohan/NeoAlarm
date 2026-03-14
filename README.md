@@ -37,6 +37,9 @@ Implemented today:
 - exact scheduling via `AlarmManager.setAlarmClock()`
 - native persistence and reschedule on boot, package replace, time change, and timezone change
 - foreground ringing service with looping audio, vibration, and full-screen recovery
+- `Skip next` for repeating alarms without disabling the full schedule
+- per-alarm `Volume ramp up` toggle
+- per-alarm `Extra loud mode` with conservative speaker-only boost
 - snooze duration and max-snooze limits
 - active ring-session recovery after process death
 - diagnostics and permission repair flows
@@ -45,6 +48,7 @@ Implemented today:
 - steps mission with `TYPE_STEP_DETECTOR` progress and cadence filtering
 - QR mission backed by a reusable native vision pipeline
 - quiet timer sourced from the persisted native timeout deadline
+- `MediaPlayer`-based alarm playback with a bundled direct-boot-safe fallback tone for reboot-before-unlock alarms
 - minified release builds, CodeQL, dependency review, and release artifact workflows
 
 ## Screenshots
@@ -181,6 +185,7 @@ Security and release decisions are tracked in the ADR set under [docs/adr](docs/
 - Riverpod for app-side state wiring
 - Kotlin on Android for the alarm engine
 - `AlarmManager.setAlarmClock()` for exact scheduling
+- `MediaPlayer` for controllable alarm playback and per-instance ramping
 - CameraX + ML Kit for the QR mission pipeline
 
 ## Getting Started

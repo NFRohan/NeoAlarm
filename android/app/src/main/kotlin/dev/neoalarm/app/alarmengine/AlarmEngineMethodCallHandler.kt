@@ -96,6 +96,22 @@ class AlarmEngineMethodCallHandler(
                     result.success(scheduler.updateEnabled(id, enabled).toChannelMap())
                 }
 
+                "skipNextOccurrence" -> {
+                    val raw = call.arguments as? Map<*, *>
+                        ?: throw IllegalArgumentException("Skip-next payload missing.")
+                    val id = raw["id"] as? String
+                        ?: throw IllegalArgumentException("Alarm id missing.")
+                    result.success(scheduler.skipNextOccurrence(id).toChannelMap())
+                }
+
+                "clearSkippedOccurrence" -> {
+                    val raw = call.arguments as? Map<*, *>
+                        ?: throw IllegalArgumentException("Clear-skip payload missing.")
+                    val id = raw["id"] as? String
+                        ?: throw IllegalArgumentException("Alarm id missing.")
+                    result.success(scheduler.clearSkippedOccurrence(id).toChannelMap())
+                }
+
                 "deleteAlarm" -> {
                     val raw = call.arguments as? Map<*, *>
                         ?: throw IllegalArgumentException("Delete payload missing.")

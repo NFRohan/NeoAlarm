@@ -56,6 +56,24 @@ class AlarmListController extends AsyncNotifier<List<AlarmSpec>> {
     );
   }
 
+  Future<void> skipNextOccurrence(String id) async {
+    final updated = await _repository.skipNextOccurrence(id);
+    final current = state.asData?.value ?? await _repository.listAlarms();
+
+    state = AsyncData(
+      _sort([...current.where((entry) => entry.id != updated.id), updated]),
+    );
+  }
+
+  Future<void> clearSkippedOccurrence(String id) async {
+    final updated = await _repository.clearSkippedOccurrence(id);
+    final current = state.asData?.value ?? await _repository.listAlarms();
+
+    state = AsyncData(
+      _sort([...current.where((entry) => entry.id != updated.id), updated]),
+    );
+  }
+
   Future<void> rescheduleAll() async {
     await _repository.rescheduleAll();
     await reload();

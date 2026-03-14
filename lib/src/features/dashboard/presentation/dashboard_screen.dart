@@ -117,6 +117,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     engineStatus.asData?.value,
                   ),
                   onDelete: (alarm) => _deleteAlarm(context, ref, alarm),
+                  onSkipNext: (alarm) => _skipNextOccurrence(context, ref, alarm),
+                  onClearSkippedOccurrence: (alarm) =>
+                      _clearSkippedOccurrence(context, ref, alarm),
                   onToggle: (alarm, enabled) =>
                       _setEnabled(context, ref, alarm, enabled),
                 )
@@ -228,6 +231,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
+  Future<void> _skipNextOccurrence(
+    BuildContext context,
+    WidgetRef ref,
+    AlarmSpec alarm,
+  ) async {
+    await _runRepositoryAction(
+      context,
+      () => ref
+          .read(alarmListControllerProvider.notifier)
+          .skipNextOccurrence(alarm.id),
+    );
+  }
+
+  Future<void> _clearSkippedOccurrence(
+    BuildContext context,
+    WidgetRef ref,
+    AlarmSpec alarm,
+  ) async {
+    await _runRepositoryAction(
+      context,
+      () => ref
+          .read(alarmListControllerProvider.notifier)
+          .clearSkippedOccurrence(alarm.id),
+    );
+  }
+
   Future<void> _runRepositoryAction(
     BuildContext context,
     Future<void> Function() action,
@@ -299,6 +328,8 @@ class _AlarmDashboardPage extends StatelessWidget {
     required this.onOpenSettings,
     required this.onEdit,
     required this.onDelete,
+    required this.onSkipNext,
+    required this.onClearSkippedOccurrence,
     required this.onToggle,
     super.key,
   });
@@ -311,6 +342,8 @@ class _AlarmDashboardPage extends StatelessWidget {
   final VoidCallback onOpenSettings;
   final Future<void> Function(AlarmSpec alarm) onEdit;
   final Future<void> Function(AlarmSpec alarm) onDelete;
+  final Future<void> Function(AlarmSpec alarm) onSkipNext;
+  final Future<void> Function(AlarmSpec alarm) onClearSkippedOccurrence;
   final Future<void> Function(AlarmSpec alarm, bool enabled) onToggle;
 
   @override
@@ -336,6 +369,8 @@ class _AlarmDashboardPage extends StatelessWidget {
             alarms: alarms,
             onEdit: onEdit,
             onDelete: onDelete,
+            onSkipNext: onSkipNext,
+            onClearSkippedOccurrence: onClearSkippedOccurrence,
             onToggle: onToggle,
           ),
         ],
@@ -468,12 +503,16 @@ class _AlarmListSection extends StatelessWidget {
     required this.alarms,
     required this.onEdit,
     required this.onDelete,
+    required this.onSkipNext,
+    required this.onClearSkippedOccurrence,
     required this.onToggle,
   });
 
   final AsyncValue<List<AlarmSpec>> alarms;
   final Future<void> Function(AlarmSpec alarm) onEdit;
   final Future<void> Function(AlarmSpec alarm) onDelete;
+  final Future<void> Function(AlarmSpec alarm) onSkipNext;
+  final Future<void> Function(AlarmSpec alarm) onClearSkippedOccurrence;
   final Future<void> Function(AlarmSpec alarm, bool enabled) onToggle;
 
   @override
@@ -492,7 +531,7 @@ class _AlarmListSection extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Create your first one-time or repeating alarm.',
+                  'Setup is done. Create your first one-time or repeating alarm and NeoAlarm will handle the rest.',
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(color: NeoColors.subtext),
@@ -509,6 +548,8 @@ class _AlarmListSection extends StatelessWidget {
                 alarm: alarm,
                 onEdit: () => onEdit(alarm),
                 onDelete: () => onDelete(alarm),
+                onSkipNext: () => onSkipNext(alarm),
+                onClearSkippedOccurrence: () => onClearSkippedOccurrence(alarm),
                 onToggle: (enabled) => onToggle(alarm, enabled),
               ),
               const SizedBox(height: 12),
@@ -535,12 +576,16 @@ class _AlarmCard extends StatelessWidget {
     required this.alarm,
     required this.onEdit,
     required this.onDelete,
+    required this.onSkipNext,
+    required this.onClearSkippedOccurrence,
     required this.onToggle,
   });
 
   final AlarmSpec alarm;
   final Future<void> Function() onEdit;
   final Future<void> Function() onDelete;
+  final Future<void> Function() onSkipNext;
+  final Future<void> Function() onClearSkippedOccurrence;
   final Future<void> Function(bool enabled) onToggle;
 
   @override
@@ -647,6 +692,17 @@ class _AlarmCard extends StatelessWidget {
             const SizedBox(height: 8),
             _InfoRow(label: 'Tone', value: alarm.ringtoneSummary),
             const SizedBox(height: 8),
+            _InfoRow(label: 'Volume', value: alarm.volumeSummary),
+            if (alarm.hasSkippedOccurrence) ...[
+              const SizedBox(height: 8),
+              _InfoRow(
+                label: 'Skip next',
+                value: _formatSkippedOccurrenceLabel(
+                  alarm.skippedOccurrenceLocalDate!,
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
             _InfoRow(label: 'Dismiss', value: alarm.missionSummary),
             const SizedBox(height: 16),
             Row(
@@ -669,6 +725,27 @@ class _AlarmCard extends StatelessWidget {
                     onDelete();
                   },
                 ),
+                if (alarm.repeats) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: NeoActionButton(
+                      label: alarm.hasSkippedOccurrence ? 'Undo skip' : 'Skip next',
+                      compact: true,
+                      backgroundColor: alarm.hasSkippedOccurrence
+                          ? NeoColors.cyan
+                          : NeoColors.panel,
+                      onPressed: alarm.hasSkippedOccurrence
+                          ? () {
+                              onClearSkippedOccurrence();
+                            }
+                          : alarm.enabled
+                          ? () {
+                              onSkipNext();
+                            }
+                          : null,
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -676,6 +753,15 @@ class _AlarmCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatSkippedOccurrenceLabel(String localDate) {
+  final parsed = DateTime.tryParse(localDate);
+  if (parsed == null) {
+    return localDate;
+  }
+
+  return '${_weekdayLabel(parsed.weekday)}, ${parsed.month}/${parsed.day}';
 }
 
 class _InfoBanner extends StatelessWidget {

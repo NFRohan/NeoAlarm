@@ -131,6 +131,24 @@ class NativeAlarmRepository implements AlarmRepository {
   }
 
   @override
+  Future<AlarmSpec> skipNextOccurrence(String id) async {
+    final raw = await _channel.invokeMapMethod<Object?, Object?>(
+      'skipNextOccurrence',
+      {'id': id},
+    );
+    return AlarmSpec.fromMap(raw ?? const {});
+  }
+
+  @override
+  Future<AlarmSpec> clearSkippedOccurrence(String id) async {
+    final raw = await _channel.invokeMapMethod<Object?, Object?>(
+      'clearSkippedOccurrence',
+      {'id': id},
+    );
+    return AlarmSpec.fromMap(raw ?? const {});
+  }
+
+  @override
   Future<void> deleteAlarm(String id) {
     return _channel.invokeMethod<void>('deleteAlarm', {'id': id});
   }

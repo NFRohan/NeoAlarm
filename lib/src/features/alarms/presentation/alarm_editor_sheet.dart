@@ -43,6 +43,8 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
   late bool _enabled;
   late Set<AlarmWeekday> _selectedWeekdays;
   late AlarmRingtone _ringtone;
+  late bool _volumeRampEnabled;
+  late bool _extraLoudEnabled;
   late int _snoozeDurationMinutes;
   late int _maxSnoozes;
   late MissionSpec _mission;
@@ -56,6 +58,8 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
     _enabled = widget.alarm.enabled;
     _selectedWeekdays = widget.alarm.weekdays.toSet();
     _ringtone = widget.alarm.ringtone;
+    _volumeRampEnabled = widget.alarm.volumeRampEnabled;
+    _extraLoudEnabled = widget.alarm.extraLoudEnabled;
     _snoozeDurationMinutes = widget.alarm.snoozeDurationMinutes;
     _maxSnoozes = widget.alarm.maxSnoozes;
     _mission = widget.alarm.mission;
@@ -256,6 +260,30 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
                             });
                           },
                         ),
+                      ),
+                      const SizedBox(height: 14),
+                      _EditorToggleRow(
+                        title: 'VOLUME RAMP UP',
+                        detail:
+                            'Start softer and climb toward full alarm volume while ringing.',
+                        value: _volumeRampEnabled,
+                        onChanged: (value) {
+                          setState(() {
+                            _volumeRampEnabled = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      _EditorToggleRow(
+                        title: 'EXTRA LOUD MODE',
+                        detail:
+                            'Applies a small speaker-only loudness boost. Headphones and Bluetooth stay untouched.',
+                        value: _extraLoudEnabled,
+                        onChanged: (value) {
+                          setState(() {
+                            _extraLoudEnabled = value;
+                          });
+                        },
                       ),
                       const SizedBox(height: 14),
                       _EditorSelector(
@@ -596,6 +624,8 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
         enabled: _enabled,
         weekdays: normalizedWeekdays,
         ringtone: _ringtone,
+        volumeRampEnabled: _volumeRampEnabled,
+        extraLoudEnabled: _extraLoudEnabled,
         snoozeDurationMinutes: _snoozeDurationMinutes,
         maxSnoozes: _maxSnoozes,
         mission: _mission,
@@ -1078,6 +1108,49 @@ class _EditorSelector extends StatelessWidget {
         children: [
           Text(title, style: Theme.of(context).textTheme.labelMedium),
           child,
+        ],
+      ),
+    );
+  }
+}
+
+class _EditorToggleRow extends StatelessWidget {
+  const _EditorToggleRow({
+    required this.title,
+    required this.detail,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String detail;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return NeoPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 6),
+                Text(
+                  detail,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: NeoColors.subtext),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          NeoToggle(value: value, onChanged: onChanged),
         ],
       ),
     );

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import dev.neoalarm.app.MainActivity
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -33,7 +34,30 @@ class AlarmScheduler(
 
     fun updateEnabled(id: String, enabled: Boolean): AlarmRecord {
         val current = store.get(id) ?: throw IllegalArgumentException("Alarm not found: $id")
-        return upsert(current.copy(enabled = enabled))
+        return upsert(
+            current.copy(
+                enabled = enabled,
+                skippedOccurrenceLocalDate = if (enabled) current.skippedOccurrenceLocalDate else null,
+            ),
+        )
+    }
+
+    fun skipNextOccurrence(id: String): AlarmRecord {
+        val current = store.get(id) ?: throw IllegalArgumentException("Alarm not found: $id")
+        if (current.weekdays.isEmpty()) {
+            throw IllegalStateException("Skip next is only available for repeating alarms.")
+        }
+
+        val nextOccurrence = computeNextTrigger(current.copy(skippedOccurrenceLocalDate = null))
+        val skippedDate = nextOccurrence.localDate
+            ?: throw IllegalStateException("Unable to determine the next occurrence to skip.")
+
+        return upsert(current.copy(skippedOccurrenceLocalDate = skippedDate.toString()))
+    }
+
+    fun clearSkippedOccurrence(id: String): AlarmRecord {
+        val current = store.get(id) ?: throw IllegalArgumentException("Alarm not found: $id")
+        return upsert(current.copy(skippedOccurrenceLocalDate = null))
     }
 
     fun delete(id: String) {
@@ -49,13 +73,16 @@ class AlarmScheduler(
     fun handleAlarmTriggered(id: String): AlarmRecord? {
         val current = store.get(id) ?: return null
         val updated = if (current.weekdays.isEmpty()) {
-            current.copy(enabled = false, nextTriggerAtEpochMillis = null)
-        } else {
             current.copy(
-                nextTriggerAtEpochMillis = computeNextTriggerEpochMillis(
-                    current,
-                    Instant.now().plusSeconds(1),
-                ),
+                enabled = false,
+                nextTriggerAtEpochMillis = null,
+                skippedOccurrenceLocalDate = null,
+            )
+        } else {
+            val nextTrigger = computeNextTrigger(current, Instant.now().plusSeconds(1))
+            current.copy(
+                nextTriggerAtEpochMillis = nextTrigger.epochMillis,
+                skippedOccurrenceLocalDate = nextTrigger.skippedOccurrenceLocalDate,
             )
         }
 
@@ -81,10 +108,13 @@ class AlarmScheduler(
             )
         }
 
-        val nextTriggerAtEpochMillis = computeNextTriggerEpochMillis(record)
-        val updated = record.copy(nextTriggerAtEpochMillis = nextTriggerAtEpochMillis)
+        val nextTrigger = computeNextTrigger(record)
+        val updated = record.copy(
+            nextTriggerAtEpochMillis = nextTrigger.epochMillis,
+            skippedOccurrenceLocalDate = nextTrigger.skippedOccurrenceLocalDate,
+        )
 
-        if (nextTriggerAtEpochMillis == null) {
+        if (nextTrigger.epochMillis == null) {
             cancel(record.id)
         } else {
             schedule(updated)
@@ -134,23 +164,28 @@ class AlarmScheduler(
         )
     }
 
-    private fun computeNextTriggerEpochMillis(
+    private fun computeNextTrigger(
         record: AlarmRecord,
         fromInstant: Instant = Instant.now(),
-    ): Long? {
+    ): NextTriggerResult {
         val zoneId = resolveZoneId(record.timezoneId)
         val now = ZonedDateTime.ofInstant(fromInstant, zoneId)
         val localTime = LocalTime.of(record.hour, record.minute)
+        val skippedDate = record.skippedOccurrenceLocalDate?.let(::parseLocalDate)
 
         if (record.weekdays.isEmpty()) {
             var candidate = now.withHour(record.hour).withMinute(record.minute).withSecond(0).withNano(0)
             if (!candidate.isAfter(now)) {
                 candidate = candidate.plusDays(1)
             }
-            return candidate.toInstant().toEpochMilli()
+            return NextTriggerResult(
+                epochMillis = candidate.toInstant().toEpochMilli(),
+                skippedOccurrenceLocalDate = null,
+                localDate = candidate.toLocalDate(),
+            )
         }
 
-        for (offset in 0..7) {
+        for (offset in 0..14) {
             val date = now.toLocalDate().plusDays(offset.toLong())
             val weekday = date.dayOfWeek.value
             if (!record.weekdays.contains(weekday)) {
@@ -158,12 +193,31 @@ class AlarmScheduler(
             }
 
             val candidate = date.atTime(localTime).atZone(zoneId)
-            if (candidate.isAfter(now)) {
-                return candidate.toInstant().toEpochMilli()
+            if (!candidate.isAfter(now)) {
+                continue
             }
+
+            if (skippedDate != null && date == skippedDate) {
+                continue
+            }
+
+            val normalizedSkippedDate = skippedDate?.takeUnless { date.isAfter(it) }
+            return NextTriggerResult(
+                epochMillis = candidate.toInstant().toEpochMilli(),
+                skippedOccurrenceLocalDate = normalizedSkippedDate?.toString(),
+                localDate = date,
+            )
         }
 
-        return null
+        return NextTriggerResult(epochMillis = null, skippedOccurrenceLocalDate = null, localDate = null)
+    }
+
+    private fun parseLocalDate(value: String): LocalDate? {
+        return try {
+            LocalDate.parse(value)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun resolveZoneId(timezoneId: String): ZoneId {
@@ -173,6 +227,12 @@ class AlarmScheduler(
             ZoneId.systemDefault()
         }
     }
+
+    private data class NextTriggerResult(
+        val epochMillis: Long?,
+        val skippedOccurrenceLocalDate: String?,
+        val localDate: LocalDate?,
+    )
 }
 
 class ExactAlarmPermissionException(message: String) : IllegalStateException(message)

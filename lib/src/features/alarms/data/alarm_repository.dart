@@ -16,6 +16,10 @@ abstract class AlarmRepository {
     required bool enabled,
   });
 
+  Future<AlarmSpec> skipNextOccurrence(String id);
+
+  Future<AlarmSpec> clearSkippedOccurrence(String id);
+
   Future<void> rescheduleAll();
 
   Future<AlarmEngineStatus> getStatus();

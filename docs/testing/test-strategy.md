@@ -54,6 +54,7 @@ Run on every pull request.
 Cover:
 
 - recurrence rules
+- skip-next occurrence semantics
 - timezone and DST behavior
 - snooze cap logic
 - mission configuration validation
@@ -89,6 +90,7 @@ Cover:
 
 - app boot and basic navigation
 - creating an alarm and confirming the schedule path succeeds
+- skip-next on a repeating alarm and confirming that only one occurrence is skipped
 - foreground ringing service startup
 - math mission flow including multi-problem completion
 - mission confirmation flow and 30-second inactivity re-trigger
@@ -127,6 +129,8 @@ Cover:
 - overnight Doze behavior
 - reboot recovery
 - reboot recovery before first unlock
+- post-reboot locked-state fallback tone behavior
+- speaker-only extra-loud route behavior and no-boost behavior on headphones/Bluetooth
 - manual time and timezone changes
 - overlapping alarms
 - overlapping alarms with explicit preemption and resume validation
@@ -252,6 +256,7 @@ Current release note:
 - release verification is not complete until the minified APK has been installed and smoke-tested on a real device
 - benchmark-only shell profiling is enabled on the dedicated `benchmark` variant, not on the shipped app manifest
 - real distribution artifacts should come from the `android/key.properties` signing path or CI secrets materialized into the same contract
+- usability expansion validation now also needs to cover skip-next scheduling, opt-in volume ramp behavior, and direct-boot-safe fallback playback after reboot-before-unlock
 
 ## Performance Automation And Profiling
 

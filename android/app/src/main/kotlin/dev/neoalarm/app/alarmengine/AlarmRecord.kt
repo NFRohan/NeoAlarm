@@ -13,10 +13,13 @@ data class AlarmRecord(
     val enabled: Boolean,
     val weekdays: List<Int>,
     val ringtoneId: String,
+    val volumeRampEnabled: Boolean,
+    val extraLoudEnabled: Boolean,
     val snoozeDurationMinutes: Int,
     val maxSnoozes: Int,
     val mission: MissionSpec,
     val nextTriggerAtEpochMillis: Long?,
+    val skippedOccurrenceLocalDate: String?,
 ) {
     fun toChannelMap(): Map<String, Any?> {
         return mapOf(
@@ -28,12 +31,15 @@ data class AlarmRecord(
             "enabled" to enabled,
             "weekdays" to weekdays,
             "ringtoneId" to ringtoneId,
+            "volumeRampEnabled" to volumeRampEnabled,
+            "extraLoudEnabled" to extraLoudEnabled,
             "snoozeDurationMinutes" to snoozeDurationMinutes,
             "maxSnoozes" to maxSnoozes,
             "mission" to mission.toChannelMap(),
             "nextTriggerAtUtc" to nextTriggerAtEpochMillis?.let {
                 Instant.ofEpochMilli(it).toString()
             },
+            "skippedOccurrenceLocalDate" to skippedOccurrenceLocalDate,
         )
     }
 
@@ -47,10 +53,13 @@ data class AlarmRecord(
             put("enabled", enabled)
             put("weekdays", JSONArray().apply { weekdays.forEach(::put) })
             put("ringtoneId", ringtoneId)
+            put("volumeRampEnabled", volumeRampEnabled)
+            put("extraLoudEnabled", extraLoudEnabled)
             put("snoozeDurationMinutes", snoozeDurationMinutes)
             put("maxSnoozes", maxSnoozes)
             put("mission", mission.toJson())
             put("nextTriggerAtEpochMillis", nextTriggerAtEpochMillis)
+            put("skippedOccurrenceLocalDate", skippedOccurrenceLocalDate)
         }
     }
 
@@ -67,6 +76,8 @@ data class AlarmRecord(
                 enabled = raw["enabled"] as Boolean,
                 weekdays = weekdaysRaw.mapNotNull { (it as? Number)?.toInt() }.sorted(),
                 ringtoneId = (raw["ringtoneId"] as? String) ?: "system_alarm",
+                volumeRampEnabled = raw["volumeRampEnabled"] as? Boolean ?: false,
+                extraLoudEnabled = raw["extraLoudEnabled"] as? Boolean ?: false,
                 snoozeDurationMinutes = (raw["snoozeDurationMinutes"] as Number).toInt(),
                 maxSnoozes = (raw["maxSnoozes"] as Number).toInt(),
                 mission = MissionSpec.fromChannelMap(
@@ -77,6 +88,7 @@ data class AlarmRecord(
                     is String -> Instant.parse(rawNextTrigger).toEpochMilli()
                     else -> null
                 },
+                skippedOccurrenceLocalDate = raw["skippedOccurrenceLocalDate"] as? String,
             )
         }
 
@@ -103,6 +115,8 @@ data class AlarmRecord(
                 enabled = json.getBoolean("enabled"),
                 weekdays = weekdays,
                 ringtoneId = json.optString("ringtoneId", "system_alarm"),
+                volumeRampEnabled = json.optBoolean("volumeRampEnabled", false),
+                extraLoudEnabled = json.optBoolean("extraLoudEnabled", false),
                 snoozeDurationMinutes = json.optInt("snoozeDurationMinutes", 9),
                 maxSnoozes = json.optInt("maxSnoozes", 3),
                 mission = MissionSpec.fromJson(
@@ -110,6 +124,7 @@ data class AlarmRecord(
                     fallbackType = json.optString("missionType", MissionSpec.TYPE_NONE),
                 ),
                 nextTriggerAtEpochMillis = nextTrigger,
+                skippedOccurrenceLocalDate = json.optString("skippedOccurrenceLocalDate").takeUnless { it.isBlank() },
             )
         }
     }

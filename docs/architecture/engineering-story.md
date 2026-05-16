@@ -910,3 +910,140 @@ The resulting model is intentionally conservative:
 - before first unlock after reboot, the alarm engine always uses the bundled direct-boot-safe tone instead of trusting a custom source
 
 That keeps custom tones as a product upgrade, not a new reliability liability.
+
+## Session Update: May 16, 2026
+
+This session pushed NeoAlarm in three directions at once:
+
+- location alarms moved from planning into a real, testable implementation
+- time alarms gained an explicit timezone mode instead of carrying an implicit timezone field with unclear semantics
+- the dashboard shell was tightened so the UI does not fight the user while the engine gets more capable
+
+These changes are worth recording together because they all touch the same underlying concern: the product can only stay trustworthy if user-facing behavior, persistence, and native scheduling semantics all agree with each other.
+
+### Location Alarms Became A Real System Surface
+
+The location-alarm work stopped being a pure planning exercise and started crossing the Flutter/native boundary for real.
+
+The setup flow now exists as a proper search-first and map-confirmed flow rather than an idea on paper. It is intentionally provider-shaped so the product is not trapped by the first MVP choices:
+
+- Flutter uses a dedicated location-alarm feature surface
+- map rendering uses `flutter_map` and OpenStreetMap tiles for now
+- place search sits behind a repository abstraction, with Nominatim as the first implementation
+- the saved alarm model stores label, coordinates, radius, and health state rather than provider-specific place metadata
+
+That matters because a location alarm is not a cosmetic extension of a time alarm. It introduces background execution, provider dependencies, and state that can become unhealthy for reasons the user cannot see unless the app makes them visible.
+
+### Location Alarm Health Had To Become Explicit
+
+The original location-alarm plan already identified the need for a health model. During implementation, that stopped being theoretical.
+
+It quickly became obvious that "alarm saved" and "alarm armed" are not the same thing when location permissions, location services, background access, Google Play services, and OEM behavior are all in the path.
+
+The implementation now treats location readiness as a first-class concept instead of assuming a saved alarm will simply trigger later.
+
+The setup flow evaluates native diagnostics and surfaces repair actions from inside the app for blocking states such as:
+
+- missing foreground location access
+- missing background location access
+- location services being turned off
+- geofence registration failure
+
+This changed the feature from "save now, fail later" into "arm only when the system is actually ready."
+
+### Geofence Registration Exposed A Real Android Edge Case
+
+The first exposed location-alarm build hit a real native registration failure.
+
+Even after permissions were granted, the alarm still reported `Geofence not armed`.
+
+Focused logging around the geofence coordinator showed that Google Play services was rejecting registration because the geofence broadcast `PendingIntent` was immutable. Fixing that alone was not enough, because Android was reusing the old immutable `PendingIntent` instance.
+
+The final working fix required two changes:
+
+- make the geofence `PendingIntent` mutable on Android 12 and above
+- force replacement of the stale old instance by using cancel-and-recreate behavior rather than updating the old one in place
+
+Once that landed, the alarm moved from `Geofence not armed` to `Ready`, and log verification confirmed successful geofence arming with no remaining registration error.
+
+That is a good example of why the project keeps native logging and on-device validation in the loop. The code looked reasonable before the logs existed. The logs were what exposed the actual platform constraint.
+
+### Time Alarms Now Have A Real Timezone Model
+
+The time-alarm model already stored `timezoneId`, but the product surface did not explain what that meant.
+
+That ambiguity becomes dangerous the moment timezone-specific alarms are exposed. A user asking for "9:00 AM Toronto time" is asking for a different kind of behavior than "9:00 AM wherever I am."
+
+The session resolved that by introducing an explicit mode split:
+
+- `Device time`
+- `Specific timezone`
+
+`Device time` now means the alarm follows the phone's current timezone and behaves like a normal local alarm when the user travels.
+
+`Specific timezone` means the alarm stays anchored to a named timezone such as `America/Toronto`, even if the user is physically elsewhere.
+
+The scheduler semantics were updated to match:
+
+- device-following alarms resolve against `ZoneId.systemDefault()`
+- anchored alarms resolve against the stored timezone identifier
+
+This matters because it turns the timezone field from an implementation detail into an honest product contract. The UI can now say what the scheduler will actually do.
+
+### Dashboard Density And Ordering Were Treated As Engineering Problems
+
+The dashboard had two real UX problems:
+
+- alarm cards had grown too tall for the amount of information a user needs at a glance
+- alarms could float around the list as next-trigger times changed or records were updated
+
+Neither of those is "just visual polish." Both affect confidence in the app.
+
+The card layout is now collapsed by default:
+
+- pill, time/location headline, toggle, and a concise summary stay visible
+- the detailed metadata and all secondary actions live behind an explicit expand affordance
+
+At the same time, alarm ordering was made stable.
+
+That required changes in both layers:
+
+- Flutter state updates now replace alarms in place instead of re-sorting the dashboard by soonest trigger
+- the native alarm store now preserves record position when an existing alarm is updated instead of removing and appending it
+
+The result is subtle but important: editing an alarm, toggling it, or changing skip state no longer makes the list feel like it has a mind of its own.
+
+### Skip-Next Became Reversible In A Visible Way
+
+The original `Skip next` work already represented skips as a concrete local occurrence date rather than a boolean flag.
+
+That model is still correct. What changed this session was the UX around undoing it.
+
+The previous behavior effectively latched the skip but left the user without an explicit in-app way to reverse it, which pushed them toward an undocumented disable/re-enable workaround.
+
+The dashboard now shows the pending skipped date and exposes an explicit `Undo skip` action when appropriate.
+
+That is a small feature on paper, but it reinforces a larger product rule: if the engine has a meaningful reversible state, the UI should not force the user to discover a side effect as the only way out.
+
+### Small UX Fixes Also Landed
+
+Several smaller but still meaningful usability fixes landed alongside the larger architectural work:
+
+- the math mission now restores focus between problems so the keyboard flow is continuous instead of forcing a tap for every answer
+- snooze summaries now use `minute` / `minutes` instead of ambiguous `min`
+- nested box-in-box styling in the alarm editor was flattened
+- the dashboard stopped showing timezone metadata when the alarm is simply following device time
+
+These are not architecture-defining changes by themselves, but they help keep the product aligned with the larger engineering goal: the app should feel intentional, not merely functional.
+
+### What This Session Changed Strategically
+
+Before this work, location alarms and timezone-specific alarms were still mostly future-facing design spaces.
+
+After this work:
+
+- location alarms have a live setup surface, health model, native geofence coordinator, and an identified Android registration pitfall already solved
+- time alarms can now honestly express local-following versus anchored-timezone behavior
+- the dashboard shell better reflects the complexity of the engine without overwhelming the user
+
+That combination matters because it shows the project maturing in the right direction. New capability is being added, but not by hiding complexity or trusting optimistic assumptions. The implementation is increasingly explicit about state, health, authority, and user-visible consequences.

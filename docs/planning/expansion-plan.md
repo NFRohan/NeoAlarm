@@ -99,6 +99,7 @@ The core alarm engine is now good enough that users will start expecting continu
 2. restore/import
 3. alarm history
 4. timezone/travel handling
+Time-zone-aware time alarms are now partially implemented through a `Device time` vs `Specific timezone` model. Future work in this bucket should focus on travel UX polish, clearer summaries, and deeper DST/timezone validation rather than inventing the basic model from scratch.
 5. holiday/date skip rules
 
 Backup and restore should come before more scheduling complexity, because they make experimentation safer for both users and maintainers.

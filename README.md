@@ -34,6 +34,7 @@ Most alarm apps are easy to style and hard to trust. NeoAlarm is designed as a r
 Implemented today:
 
 - multiple one-time and repeating alarms
+- per-alarm time mode: follow device time or pin to a specific timezone
 - exact scheduling via `AlarmManager.setAlarmClock()`
 - native persistence and reschedule on boot, package replace, time change, and timezone change
 - foreground ringing service with looping audio, vibration, and full-screen recovery

@@ -51,3 +51,5 @@ Recommended sections:
 - [0012-mediaplayer-ramp-and-direct-boot-fallback.md](0012-mediaplayer-ramp-and-direct-boot-fallback.md)
 - [0013-extra-loud-speaker-only-mode.md](0013-extra-loud-speaker-only-mode.md)
 - [0014-custom-tone-import-and-fallback-policy.md](0014-custom-tone-import-and-fallback-policy.md)
+- [0015-location-alarm-geofencing-and-provider-strategy.md](0015-location-alarm-geofencing-and-provider-strategy.md)
+- [0016-location-alarm-hybrid-geofence-and-passive-approach.md](0016-location-alarm-hybrid-geofence-and-passive-approach.md)

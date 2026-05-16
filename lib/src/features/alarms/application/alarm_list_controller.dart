@@ -22,20 +22,17 @@ class AlarmListController extends AsyncNotifier<List<AlarmSpec>> {
 
   @override
   Future<List<AlarmSpec>> build() async {
-    return _sort(await _repository.listAlarms());
+    return await _repository.listAlarms();
   }
 
   Future<void> reload() async {
-    state = AsyncData(_sort(await _repository.listAlarms()));
+    state = AsyncData(await _repository.listAlarms());
   }
 
   Future<void> saveAlarm(AlarmSpec alarm) async {
     final saved = await _repository.upsertAlarm(alarm);
     final current = state.asData?.value ?? await _repository.listAlarms();
-
-    state = AsyncData(
-      _sort([...current.where((entry) => entry.id != saved.id), saved]),
-    );
+    state = AsyncData(_replacePreservingPosition(current, saved));
   }
 
   Future<void> deleteAlarm(String id) async {
@@ -50,28 +47,19 @@ class AlarmListController extends AsyncNotifier<List<AlarmSpec>> {
   Future<void> setEnabled({required String id, required bool enabled}) async {
     final updated = await _repository.setAlarmEnabled(id: id, enabled: enabled);
     final current = state.asData?.value ?? await _repository.listAlarms();
-
-    state = AsyncData(
-      _sort([...current.where((entry) => entry.id != updated.id), updated]),
-    );
+    state = AsyncData(_replacePreservingPosition(current, updated));
   }
 
   Future<void> skipNextOccurrence(String id) async {
     final updated = await _repository.skipNextOccurrence(id);
     final current = state.asData?.value ?? await _repository.listAlarms();
-
-    state = AsyncData(
-      _sort([...current.where((entry) => entry.id != updated.id), updated]),
-    );
+    state = AsyncData(_replacePreservingPosition(current, updated));
   }
 
   Future<void> clearSkippedOccurrence(String id) async {
     final updated = await _repository.clearSkippedOccurrence(id);
     final current = state.asData?.value ?? await _repository.listAlarms();
-
-    state = AsyncData(
-      _sort([...current.where((entry) => entry.id != updated.id), updated]),
-    );
+    state = AsyncData(_replacePreservingPosition(current, updated));
   }
 
   Future<void> rescheduleAll() async {
@@ -79,26 +67,28 @@ class AlarmListController extends AsyncNotifier<List<AlarmSpec>> {
     await reload();
   }
 
-  List<AlarmSpec> _sort(List<AlarmSpec> alarms) {
-    final sorted = [...alarms];
-    sorted.sort((left, right) {
-      final leftTrigger =
-          left.nextTriggerAtUtc?.millisecondsSinceEpoch ?? 9223372036854775807;
-      final rightTrigger =
-          right.nextTriggerAtUtc?.millisecondsSinceEpoch ?? 9223372036854775807;
+  Future<void> refreshLocationAlarm(String id) async {
+    final updated = await _repository.refreshLocationAlarm(id);
+    final current = state.asData?.value ?? await _repository.listAlarms();
+    state = AsyncData(_replacePreservingPosition(current, updated));
+  }
 
-      final triggerCompare = leftTrigger.compareTo(rightTrigger);
-      if (triggerCompare != 0) {
-        return triggerCompare;
-      }
+  Future<void> refreshLocationAlarms() async {
+    await _repository.refreshLocationAlarms();
+    await reload();
+  }
 
-      final hourCompare = left.hour.compareTo(right.hour);
-      if (hourCompare != 0) {
-        return hourCompare;
-      }
+  List<AlarmSpec> _replacePreservingPosition(
+    List<AlarmSpec> current,
+    AlarmSpec updated,
+  ) {
+    final existingIndex = current.indexWhere((entry) => entry.id == updated.id);
+    if (existingIndex == -1) {
+      return [...current, updated];
+    }
 
-      return left.minute.compareTo(right.minute);
-    });
-    return sorted;
+    final alarms = [...current];
+    alarms[existingIndex] = updated;
+    return alarms;
   }
 }

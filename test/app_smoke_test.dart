@@ -3,10 +3,13 @@ import 'package:neoalarm/src/features/alarms/application/alarm_list_controller.d
 import 'package:neoalarm/src/features/alarms/data/alarm_repository.dart';
 import 'package:neoalarm/src/features/alarms/domain/active_alarm_session.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_engine_status.dart';
+import 'package:neoalarm/src/features/alarms/domain/alarm_location_trigger.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_mission.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_tone.dart';
 import 'package:neoalarm/src/features/app_startup/domain/app_startup_context.dart';
+import 'package:neoalarm/src/features/location_alarms/domain/current_location_snapshot.dart';
+import 'package:neoalarm/src/features/location_alarms/domain/location_alarm_setup_diagnostics.dart';
 import 'package:neoalarm/src/features/onboarding/application/onboarding_controller.dart';
 import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
 import 'package:flutter/material.dart';
@@ -151,6 +154,27 @@ void main() {
     final darkScaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
     expect(darkScaffold.backgroundColor, const Color(0xFF11151A));
   });
+
+  testWidgets('add button offers time and location alarm types', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          alarmRepositoryProvider.overrideWithValue(_FakeAlarmRepository()),
+        ],
+        child: const AlarmApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    expect(find.text('NEW ALARM TYPE'), findsOneWidget);
+    expect(find.text('TIME ALARM'), findsOneWidget);
+    expect(find.text('LOCATION ALARM'), findsOneWidget);
+  });
 }
 
 class _FakeAlarmRepository implements AlarmRepository {
@@ -190,6 +214,9 @@ class _FakeAlarmRepository implements AlarmRepository {
       cameraPermissionGranted: false,
       hasStepSensor: true,
       activityRecognitionGranted: false,
+      locationServicesEnabled: true,
+      foregroundLocationGranted: false,
+      backgroundLocationGranted: false,
       timezoneId: 'UTC',
     );
   }
@@ -216,13 +243,38 @@ class _FakeAlarmRepository implements AlarmRepository {
   Future<void> requestBatteryOptimizationExemption() async {}
 
   @override
+  Future<void> requestBackgroundLocationPermission() async {}
+
+  @override
   Future<void> requestCameraPermission() async {}
+
+  @override
+  Future<void> requestForegroundLocationPermission() async {}
 
   @override
   Future<void> requestExactAlarmPermission() async {}
 
   @override
   Future<void> requestNotificationPermission() async {}
+
+  @override
+  Future<void> openLocationSettings() async {}
+
+  @override
+  Future<CurrentLocationSnapshot?> getCurrentLocationSnapshot() async => null;
+
+  @override
+  Future<LocationAlarmSetupDiagnostics> evaluateLocationTrigger(
+    AlarmLocationTrigger trigger,
+  ) async {
+    return const LocationAlarmSetupDiagnostics(
+      health: AlarmLocationHealth.healthy,
+      alreadyInsideRadius: false,
+    );
+  }
+
+  @override
+  Future<void> runLocationAlarmForegroundCheck() async {}
 
   @override
   Future<List<AlarmSpec>> listAlarms() async {
@@ -248,6 +300,19 @@ class _FakeAlarmRepository implements AlarmRepository {
   @override
   Future<AlarmSpec> clearSkippedOccurrence(String id) async {
     throw UnimplementedError();
+  }
+
+  @override
+  Future<AlarmSpec> refreshLocationAlarm(String id) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> refreshLocationAlarms() async {}
+
+  @override
+  Future<List<String>> listAvailableTimezones() async {
+    return const ['UTC', 'America/Toronto', 'Asia/Dhaka'];
   }
 
   @override

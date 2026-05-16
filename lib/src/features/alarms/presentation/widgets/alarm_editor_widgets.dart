@@ -22,11 +22,7 @@ class AlarmTimeBlock extends StatelessWidget {
 }
 
 class AlarmPeriodChip extends StatelessWidget {
-  const AlarmPeriodChip({
-    required this.label,
-    required this.active,
-    super.key,
-  });
+  const AlarmPeriodChip({required this.label, required this.active, super.key});
 
   final String label;
   final bool active;
@@ -65,15 +61,13 @@ class AlarmEditorSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return NeoPanel(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.labelMedium),
-          child,
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 8),
+        child,
+      ],
     );
   }
 }
@@ -199,6 +193,39 @@ class AlarmEditorWarning extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class AlarmEditorInfoRow extends StatelessWidget {
+  const AlarmEditorInfoRow({
+    required this.label,
+    required this.value,
+    super.key,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: NeoColors.subtext,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
+      ],
     );
   }
 }

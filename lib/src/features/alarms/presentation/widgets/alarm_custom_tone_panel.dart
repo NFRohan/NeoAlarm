@@ -40,108 +40,106 @@ class AlarmCustomTonePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final selectedTone = _selectedTone;
 
-    return NeoPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('CUSTOM TONE', style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 10),
-          if (tonesLoading)
-            const LinearProgressIndicator()
-          else if (toneLibraryError != null)
-            Text(
-              toneLibraryError!,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: NeoColors.warningText),
-            )
-          else if (tones.isEmpty)
-            Text(
-              'No custom tones imported yet.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: NeoColors.subtext),
-            )
-          else
-            DropdownButtonFormField<String>(
-              initialValue: selectedTone?.id,
-              decoration: const InputDecoration(border: InputBorder.none),
-              icon: const Icon(Icons.expand_more),
-              isExpanded: true,
-              items: tones
-                  .map(
-                    (tone) => DropdownMenuItem<String>(
-                      value: tone.id,
-                      child: Text(
-                        tone.displayName.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('CUSTOM TONE', style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 8),
+        if (tonesLoading)
+          const LinearProgressIndicator()
+        else if (toneLibraryError != null)
+          Text(
+            toneLibraryError!,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: NeoColors.warningText),
+          )
+        else if (tones.isEmpty)
+          Text(
+            'No custom tones imported yet.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: NeoColors.subtext),
+          )
+        else
+          DropdownButtonFormField<String>(
+            initialValue: selectedTone?.id,
+            decoration: const InputDecoration(border: InputBorder.none),
+            icon: const Icon(Icons.expand_more),
+            isExpanded: true,
+            items: tones
+                .map(
+                  (tone) => DropdownMenuItem<String>(
+                    value: tone.id,
+                    child: Text(
+                      tone.displayName.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  )
-                  .toList(growable: false),
-              selectedItemBuilder: (context) => tones
-                  .map(
-                    (tone) => Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        tone.displayName.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  ),
+                )
+                .toList(growable: false),
+            selectedItemBuilder: (context) => tones
+                .map(
+                  (tone) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      tone.displayName.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  )
-                  .toList(growable: false),
-              onChanged: onToneSelected,
-            ),
-          if (selectedTone != null) ...[
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: onToneSelected,
+          ),
+        if (selectedTone != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            selectedTone.metadataSummary,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: NeoColors.subtext),
+          ),
+          if (!selectedTone.isHealthy || selectedTone.warning != null) ...[
             const SizedBox(height: 8),
-            Text(
-              selectedTone.metadataSummary,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: NeoColors.subtext),
-            ),
-            if (!selectedTone.isHealthy || selectedTone.warning != null) ...[
-              const SizedBox(height: 8),
-              AlarmEditorWarning(
-                title: 'Custom tone needs attention',
-                detail:
-                    selectedTone.warning ??
-                    'This custom tone is unavailable. NeoAlarm will fall back to the bundled alarm tone until you repair it.',
-              ),
-            ],
-          ],
-          if (_hasMissingSelectedTone) ...[
-            const SizedBox(height: 8),
-            const AlarmEditorWarning(
-              title: 'Missing custom tone',
+            AlarmEditorWarning(
+              title: 'Custom tone needs attention',
               detail:
-                  'This alarm points at a custom tone that no longer exists. NeoAlarm will fall back to the bundled alarm tone until you choose another tone.',
+                  selectedTone.warning ??
+                  'This custom tone is unavailable. NeoAlarm will fall back to the bundled alarm tone until you repair it.',
             ),
           ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: NeoActionButton(
-                  label: 'Import tone',
-                  backgroundColor: NeoColors.primary,
-                  onPressed: onImportTone,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: NeoActionButton(
-                  label: 'Manage imports',
-                  backgroundColor: NeoColors.panel,
-                  onPressed: onManageTones,
-                ),
-              ),
-            ],
+        ],
+        if (_hasMissingSelectedTone) ...[
+          const SizedBox(height: 8),
+          const AlarmEditorWarning(
+            title: 'Missing custom tone',
+            detail:
+                'This alarm points at a custom tone that no longer exists. NeoAlarm will fall back to the bundled alarm tone until you choose another tone.',
           ),
         ],
-      ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: NeoActionButton(
+                label: 'Import tone',
+                backgroundColor: NeoColors.primary,
+                onPressed: onImportTone,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: NeoActionButton(
+                label: 'Manage imports',
+                backgroundColor: NeoColors.panel,
+                onPressed: onManageTones,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -209,7 +207,9 @@ class AlarmToneManagementSheet extends StatelessWidget {
                               children: [
                                 Text(
                                   tone.displayName,
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -219,7 +219,8 @@ class AlarmToneManagementSheet extends StatelessWidget {
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(color: NeoColors.subtext),
                                 ),
-                                if (!tone.isHealthy || tone.warning != null) ...[
+                                if (!tone.isHealthy ||
+                                    tone.warning != null) ...[
                                   const SizedBox(height: 6),
                                   Text(
                                     tone.warning ??

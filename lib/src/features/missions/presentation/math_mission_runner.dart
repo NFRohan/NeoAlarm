@@ -44,6 +44,7 @@ class MathMissionRunner extends StatefulWidget {
 
 class _MathMissionRunnerState extends State<MathMissionRunner> {
   late final TextEditingController _answerController;
+  late final FocusNode _answerFocusNode;
   String? _feedbackText;
   bool _submitting = false;
 
@@ -51,11 +52,14 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
   void initState() {
     super.initState();
     _answerController = TextEditingController();
+    _answerFocusNode = FocusNode();
+    _restoreInputFocus();
   }
 
   @override
   void dispose() {
     _answerController.dispose();
+    _answerFocusNode.dispose();
     super.dispose();
   }
 
@@ -66,6 +70,7 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
       _answerController.clear();
       _feedbackText = null;
       _submitting = false;
+      _restoreInputFocus();
       return;
     }
 
@@ -73,6 +78,7 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
     final currentPrompt = widget.session.mission.mathChallenge?.prompt;
     if (previousPrompt != currentPrompt) {
       _answerController.clear();
+      _restoreInputFocus();
     }
   }
 
@@ -126,6 +132,8 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
           const SizedBox(height: 14),
           TextField(
             controller: _answerController,
+            focusNode: _answerFocusNode,
+            autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(signed: true),
             decoration: const InputDecoration(hintText: 'Type the answer'),
             onChanged: (_) {
@@ -193,6 +201,19 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
     setState(() {
       _submitting = false;
       _feedbackText = feedbackText;
+    });
+
+    if (result != MathAnswerSubmissionResult.completed) {
+      _restoreInputFocus();
+    }
+  }
+
+  void _restoreInputFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _answerFocusNode.requestFocus();
     });
   }
 }

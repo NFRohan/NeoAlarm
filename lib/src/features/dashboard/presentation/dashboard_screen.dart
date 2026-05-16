@@ -7,14 +7,18 @@ import 'package:neoalarm/src/core/theme/app_theme.dart';
 import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
 import 'package:neoalarm/src/features/alarms/application/alarm_list_controller.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_engine_status.dart';
+import 'package:neoalarm/src/features/alarms/domain/alarm_location_trigger.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
 import 'package:neoalarm/src/features/alarms/presentation/alarm_editor_sheet.dart';
 import 'package:neoalarm/src/features/dashboard/presentation/widgets/dashboard_widgets.dart';
+import 'package:neoalarm/src/features/location_alarms/presentation/location_alarm_setup_screen.dart';
 import 'package:neoalarm/src/features/onboarding/application/onboarding_controller.dart';
 import 'package:neoalarm/src/features/settings/application/theme_mode_controller.dart';
 import 'package:neoalarm/src/features/settings/presentation/settings_screen.dart';
 
 enum _DashboardTab { alarms, settings }
+
+enum _AlarmCreateMode { time, location }
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -50,9 +54,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.invalidate(alarmEngineStatusProvider);
-      if (_selectedTab == _DashboardTab.alarms) {
-        ref.invalidate(alarmListControllerProvider);
-      }
+      unawaited(_refreshAlarmStateOnResume(ref));
     }
   }
 
@@ -117,9 +119,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     engineStatus.asData?.value,
                   ),
                   onDelete: (alarm) => _deleteAlarm(context, ref, alarm),
-                  onSkipNext: (alarm) => _skipNextOccurrence(context, ref, alarm),
+                  onSkipNext: (alarm) =>
+                      _skipNextOccurrence(context, ref, alarm),
                   onClearSkippedOccurrence: (alarm) =>
                       _clearSkippedOccurrence(context, ref, alarm),
+                  onRepairLocationAlarm: (alarm) =>
+                      _repairLocationAlarm(context, ref, alarm),
                   onToggle: (alarm, enabled) =>
                       _setEnabled(context, ref, alarm, enabled),
                 )
@@ -144,6 +149,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                   onRequestBatteryOptimizationExemption: () {
                     _requestBatteryOptimizationExemption(context);
                   },
+                  onOpenLocationSettings: () {
+                    _openLocationSettings(context);
+                  },
+                  onRequestForegroundLocationPermission: () {
+                    _requestForegroundLocationPermission(context);
+                  },
+                  onRequestBackgroundLocationPermission: () {
+                    _requestBackgroundLocationPermission(context);
+                  },
                   onRequestCameraPermission: () {
                     _requestCameraPermission(context);
                   },
@@ -166,6 +180,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     WidgetRef ref,
     AlarmEngineStatus? engineStatus,
   ) async {
+    final mode = await _pickAlarmCreateMode(context);
+    if (mode == null || !context.mounted) {
+      return;
+    }
+
+    if (mode == _AlarmCreateMode.location) {
+      final locationTrigger = await LocationAlarmSetupScreen.show(context);
+      if (locationTrigger == null || !context.mounted) {
+        return;
+      }
+
+      final draft = AlarmSpec.createLocationDraft(
+        timezoneId: engineStatus?.timezoneId ?? 'UTC',
+        locationTrigger: locationTrigger,
+      );
+
+      await _runRepositoryAction(
+        context,
+        () => ref.read(alarmListControllerProvider.notifier).saveAlarm(draft),
+      );
+      return;
+    }
+
     final draft = AlarmSpec.createDraft(
       timezoneId: engineStatus?.timezoneId ?? 'UTC',
     );
@@ -190,6 +227,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     AlarmSpec alarm,
     AlarmEngineStatus? engineStatus,
   ) async {
+    if (alarm.isLocationAlarm) {
+      final locationTrigger = await LocationAlarmSetupScreen.show(
+        context,
+        initialTrigger: alarm.locationTrigger,
+      );
+      if (locationTrigger == null || !context.mounted) {
+        return;
+      }
+
+      final edited = alarm.copyWith(
+        label: locationTrigger.label,
+        locationTrigger: locationTrigger,
+      );
+
+      await _runRepositoryAction(
+        context,
+        () => ref.read(alarmListControllerProvider.notifier).saveAlarm(edited),
+      );
+      return;
+    }
+
     final edited = await AlarmEditorSheet.show(
       context,
       alarm: alarm,
@@ -257,6 +315,80 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
+  Future<void> _repairLocationAlarm(
+    BuildContext context,
+    WidgetRef ref,
+    AlarmSpec alarm,
+  ) async {
+    final health = alarm.locationTrigger?.health;
+    if (health == null) {
+      return;
+    }
+
+    switch (health) {
+      case AlarmLocationHealth.noForegroundPermission:
+        await _runRepositoryAction(
+          context,
+          () => ref
+              .read(alarmRepositoryProvider)
+              .requestForegroundLocationPermission(),
+        );
+        break;
+      case AlarmLocationHealth.noBackgroundPermission:
+        await _runRepositoryAction(
+          context,
+          () => ref
+              .read(alarmRepositoryProvider)
+              .requestBackgroundLocationPermission(),
+        );
+        break;
+      case AlarmLocationHealth.locationDisabled:
+        await _runRepositoryAction(
+          context,
+          () => ref.read(alarmRepositoryProvider).openLocationSettings(),
+        );
+        return;
+      case AlarmLocationHealth.geofenceNotRegistered:
+        await _runRepositoryAction(
+          context,
+          () => ref
+              .read(alarmListControllerProvider.notifier)
+              .refreshLocationAlarm(alarm.id),
+        );
+        return;
+      case AlarmLocationHealth.waitingForExit:
+        return;
+      case AlarmLocationHealth.batteryRestricted:
+        await _runRepositoryAction(
+          context,
+          () => ref
+              .read(alarmRepositoryProvider)
+              .requestBatteryOptimizationExemption(),
+        );
+        return;
+      case AlarmLocationHealth.playServicesUnavailable:
+      case AlarmLocationHealth.lowLocationConfidence:
+      case AlarmLocationHealth.healthy:
+        return;
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!context.mounted) {
+      return;
+    }
+
+    await _runRepositoryAction(
+      context,
+      () => ref
+          .read(alarmListControllerProvider.notifier)
+          .refreshLocationAlarm(alarm.id),
+    );
+  }
+
   Future<void> _runRepositoryAction(
     BuildContext context,
     Future<void> Function() action,
@@ -271,6 +403,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.message ?? error.code)));
+    }
+  }
+
+  Future<void> _refreshAlarmStateOnResume(WidgetRef ref) async {
+    try {
+      await ref
+          .read(alarmListControllerProvider.notifier)
+          .refreshLocationAlarms();
+    } on PlatformException {
+      ref.invalidate(alarmListControllerProvider);
     }
   }
 
@@ -299,6 +441,35 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
+  Future<void> _openLocationSettings(BuildContext context) async {
+    await _runRepositoryAction(
+      context,
+      () => ref.read(alarmRepositoryProvider).openLocationSettings(),
+    );
+  }
+
+  Future<void> _requestForegroundLocationPermission(
+    BuildContext context,
+  ) async {
+    await _runRepositoryAction(
+      context,
+      () => ref
+          .read(alarmRepositoryProvider)
+          .requestForegroundLocationPermission(),
+    );
+  }
+
+  Future<void> _requestBackgroundLocationPermission(
+    BuildContext context,
+  ) async {
+    await _runRepositoryAction(
+      context,
+      () => ref
+          .read(alarmRepositoryProvider)
+          .requestBackgroundLocationPermission(),
+    );
+  }
+
   Future<void> _requestCameraPermission(BuildContext context) async {
     await _runRepositoryAction(
       context,
@@ -314,6 +485,56 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       () => ref
           .read(alarmRepositoryProvider)
           .requestActivityRecognitionPermission(),
+    );
+  }
+
+  Future<_AlarmCreateMode?> _pickAlarmCreateMode(BuildContext context) {
+    return showModalBottomSheet<_AlarmCreateMode>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: NeoPanel(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'NEW ALARM TYPE',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Time alarms are the regular clock-based flow. Location alarms trigger near a saved destination.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: NeoColors.subtext),
+                ),
+                const SizedBox(height: 16),
+                NeoActionButton(
+                  label: 'Time alarm',
+                  backgroundColor: NeoColors.primary,
+                  onPressed: () {
+                    Navigator.of(context).pop(_AlarmCreateMode.time);
+                  },
+                  expand: true,
+                ),
+                const SizedBox(height: 12),
+                NeoActionButton(
+                  label: 'Location alarm',
+                  backgroundColor: NeoColors.cyan,
+                  foregroundColor: NeoColors.accentInk,
+                  onPressed: () {
+                    Navigator.of(context).pop(_AlarmCreateMode.location);
+                  },
+                  expand: true,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

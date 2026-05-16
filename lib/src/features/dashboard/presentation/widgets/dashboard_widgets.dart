@@ -4,6 +4,7 @@ import 'package:neoalarm/src/core/theme/app_theme.dart';
 import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_countdown_formatter.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_engine_status.dart';
+import 'package:neoalarm/src/features/alarms/domain/alarm_location_trigger.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
 
 class AlarmDashboardPage extends StatelessWidget {
@@ -18,6 +19,7 @@ class AlarmDashboardPage extends StatelessWidget {
     required this.onDelete,
     required this.onSkipNext,
     required this.onClearSkippedOccurrence,
+    required this.onRepairLocationAlarm,
     required this.onToggle,
     super.key,
   });
@@ -32,6 +34,7 @@ class AlarmDashboardPage extends StatelessWidget {
   final Future<void> Function(AlarmSpec alarm) onDelete;
   final Future<void> Function(AlarmSpec alarm) onSkipNext;
   final Future<void> Function(AlarmSpec alarm) onClearSkippedOccurrence;
+  final Future<void> Function(AlarmSpec alarm) onRepairLocationAlarm;
   final Future<void> Function(AlarmSpec alarm, bool enabled) onToggle;
 
   @override
@@ -59,6 +62,7 @@ class AlarmDashboardPage extends StatelessWidget {
             onDelete: onDelete,
             onSkipNext: onSkipNext,
             onClearSkippedOccurrence: onClearSkippedOccurrence,
+            onRepairLocationAlarm: onRepairLocationAlarm,
             onToggle: onToggle,
           ),
         ],
@@ -152,7 +156,9 @@ class PermissionBannerRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      needsExact ? 'Enable exact alarms' : 'Enable notifications',
+                      needsExact
+                          ? 'Enable exact alarms'
+                          : 'Enable notifications',
                       style: Theme.of(
                         context,
                       ).textTheme.titleLarge?.copyWith(fontSize: 18),
@@ -193,6 +199,7 @@ class AlarmListSection extends StatelessWidget {
     required this.onDelete,
     required this.onSkipNext,
     required this.onClearSkippedOccurrence,
+    required this.onRepairLocationAlarm,
     required this.onToggle,
     super.key,
   });
@@ -202,6 +209,7 @@ class AlarmListSection extends StatelessWidget {
   final Future<void> Function(AlarmSpec alarm) onDelete;
   final Future<void> Function(AlarmSpec alarm) onSkipNext;
   final Future<void> Function(AlarmSpec alarm) onClearSkippedOccurrence;
+  final Future<void> Function(AlarmSpec alarm) onRepairLocationAlarm;
   final Future<void> Function(AlarmSpec alarm, bool enabled) onToggle;
 
   @override
@@ -239,6 +247,7 @@ class AlarmListSection extends StatelessWidget {
                 onDelete: () => onDelete(alarm),
                 onSkipNext: () => onSkipNext(alarm),
                 onClearSkippedOccurrence: () => onClearSkippedOccurrence(alarm),
+                onRepairLocationAlarm: () => onRepairLocationAlarm(alarm),
                 onToggle: (enabled) => onToggle(alarm, enabled),
               ),
               const SizedBox(height: 12),
@@ -260,13 +269,14 @@ class AlarmListSection extends StatelessWidget {
   }
 }
 
-class AlarmCard extends StatelessWidget {
+class AlarmCard extends StatefulWidget {
   const AlarmCard({
     required this.alarm,
     required this.onEdit,
     required this.onDelete,
     required this.onSkipNext,
     required this.onClearSkippedOccurrence,
+    required this.onRepairLocationAlarm,
     required this.onToggle,
     super.key,
   });
@@ -276,18 +286,32 @@ class AlarmCard extends StatelessWidget {
   final Future<void> Function() onDelete;
   final Future<void> Function() onSkipNext;
   final Future<void> Function() onClearSkippedOccurrence;
+  final Future<void> Function() onRepairLocationAlarm;
   final Future<void> Function(bool enabled) onToggle;
 
   @override
+  State<AlarmCard> createState() => _AlarmCardState();
+}
+
+class _AlarmCardState extends State<AlarmCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final alarm = widget.alarm;
     final theme = Theme.of(context);
     final localizations = MaterialLocalizations.of(context);
     final nextTrigger = alarm.nextTriggerAtLocal;
-    final isWorkingWeek =
-        alarm.weekdays.isEmpty ||
-        alarm.weekdays.every(
-          (weekday) => weekday.isoValue >= 1 && weekday.isoValue <= 5,
-        );
+    final locationTrigger = alarm.locationTrigger;
+    final collapsedSummary = _collapsedSummary(
+      context,
+      alarm,
+      nextTrigger,
+      localizations,
+    );
+    final collapsedWarning = _collapsedWarning(alarm, locationTrigger);
+    final displayLabel = _displayLabel(alarm, locationTrigger);
+    final repairActionLabel = locationTrigger?.repairActionLabel;
 
     return Opacity(
       opacity: alarm.enabled ? 1 : 0.78,
@@ -302,154 +326,309 @@ class AlarmCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      NeoPill(
-                        label: alarm.label,
-                        backgroundColor: alarm.enabled
-                            ? isWorkingWeek
-                                  ? NeoColors.primary
-                                  : NeoColors.cyan
-                            : NeoColors.muted,
-                      ),
-                      const SizedBox(height: 12),
-                      RichText(
-                        text: TextSpan(
-                          style: theme.textTheme.displayMedium,
+                      if (displayLabel != null) ...[
+                        Text(
+                          displayLabel.toUpperCase(),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: NeoColors.subtext,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      if (alarm.isLocationAlarm)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            TextSpan(
-                              text: localizations
-                                  .formatTimeOfDay(
-                                    TimeOfDay(
-                                      hour: alarm.hour,
-                                      minute: alarm.minute,
-                                    ),
-                                    alwaysUse24HourFormat:
-                                        MediaQuery.alwaysUse24HourFormatOf(
-                                          context,
-                                        ),
-                                  )
-                                  .replaceAll(RegExp(r'\s?[AP]M$'), ''),
+                            Text(
+                              'LOCATION',
+                              style: theme.textTheme.displayMedium,
                             ),
-                            TextSpan(
-                              text: MediaQuery.alwaysUse24HourFormatOf(context)
-                                  ? ''
-                                  : ' ${localizations.formatTimeOfDay(TimeOfDay(hour: alarm.hour, minute: alarm.minute), alwaysUse24HourFormat: false).split(' ').last}',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontStyle: FontStyle.italic,
+                            const SizedBox(height: 4),
+                            Text(
+                              locationTrigger?.label ?? 'Destination',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: NeoColors.subtext,
                               ),
                             ),
                           ],
+                        )
+                      else
+                        RichText(
+                          text: TextSpan(
+                            style: theme.textTheme.displayMedium,
+                            children: [
+                              TextSpan(
+                                text: localizations
+                                    .formatTimeOfDay(
+                                      TimeOfDay(
+                                        hour: alarm.hour,
+                                        minute: alarm.minute,
+                                      ),
+                                      alwaysUse24HourFormat:
+                                          MediaQuery.alwaysUse24HourFormatOf(
+                                            context,
+                                          ),
+                                    )
+                                    .replaceAll(RegExp(r'\s?[AP]M$'), ''),
+                              ),
+                              TextSpan(
+                                text:
+                                    MediaQuery.alwaysUse24HourFormatOf(context)
+                                    ? ''
+                                    : ' ${localizations.formatTimeOfDay(TimeOfDay(hour: alarm.hour, minute: alarm.minute), alwaysUse24HourFormat: false).split(' ').last}',
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Text(
+                        collapsedSummary,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: NeoColors.subtext,
                         ),
                       ),
+                      if (collapsedWarning != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          collapsedWarning,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: NeoColors.warningText,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                NeoToggle(
-                  value: alarm.enabled,
-                  onChanged: (enabled) {
-                    onToggle(enabled);
-                  },
+                const SizedBox(width: 12),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _expanded = !_expanded;
+                        });
+                      },
+                      child: Icon(
+                        _expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    NeoToggle(
+                      value: alarm.enabled,
+                      onChanged: (enabled) {
+                        widget.onToggle(enabled);
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: AlarmWeekday.values
-                  .map(
-                    (weekday) => NeoDayChip(
-                      label: weekday.shortLabel.characters.first,
-                      selected: alarm.weekdays.contains(weekday),
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (alarm.isTimeAlarm) ...[
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: AlarmWeekday.values
+                            .map(
+                              (weekday) => NeoDayChip(
+                                label: weekday.shortLabel.characters.first,
+                                selected: alarm.weekdays.contains(weekday),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 16),
+                      InfoRow(
+                        label: 'Next',
+                        value: nextTrigger == null
+                            ? 'Not scheduled'
+                            : '${weekdayLabel(nextTrigger.weekday)}, ${nextTrigger.month}/${nextTrigger.day} ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(nextTrigger), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context))}',
+                      ),
+                    ] else ...[
+                      InfoRow(
+                        label: 'Trigger',
+                        value:
+                            locationTrigger?.radiusSummary ?? 'Not configured',
+                      ),
+                      const SizedBox(height: 8),
+                      InfoRow(
+                        label: 'Status',
+                        value: locationTrigger?.health.label ?? 'Not evaluated',
+                        warning: alarm.hasLocationWarning,
+                      ),
+                    ],
+                    if (alarm.usesSpecificTimezone) ...[
+                      const SizedBox(height: 8),
+                      InfoRow(label: 'Time zone', value: alarm.timezoneSummary),
+                    ],
+                    if (alarm.isLocationAlarm && repairActionLabel != null) ...[
+                      const SizedBox(height: 12),
+                      NeoActionButton(
+                        label: repairActionLabel,
+                        backgroundColor: NeoColors.cyan,
+                        foregroundColor: NeoColors.accentInk,
+                        onPressed: widget.onRepairLocationAlarm,
+                        expand: true,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    InfoRow(
+                      label: 'Snooze',
+                      value:
+                          '${alarm.snoozeDurationMinutes} ${alarm.snoozeDurationMinutes == 1 ? 'minute' : 'minutes'} | ${alarm.maxSnoozes} max',
                     ),
-                  )
-                  .toList(growable: false),
-            ),
-            const SizedBox(height: 16),
-            InfoRow(
-              label: 'Next',
-              value: nextTrigger == null
-                  ? 'Not scheduled'
-                  : '${weekdayLabel(nextTrigger.weekday)}, ${nextTrigger.month}/${nextTrigger.day} ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(nextTrigger), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context))}',
-            ),
-            const SizedBox(height: 8),
-            InfoRow(label: 'Timezone', value: alarm.timezoneId),
-            const SizedBox(height: 8),
-            InfoRow(
-              label: 'Snooze',
-              value:
-                  '${alarm.snoozeDurationMinutes} min | ${alarm.maxSnoozes} max',
-            ),
-            const SizedBox(height: 8),
-            InfoRow(label: 'Tone', value: alarm.ringtoneSummary),
-            if (alarm.hasCustomToneWarning) ...[
-              const SizedBox(height: 8),
-              const InfoRow(
-                label: 'Tone status',
-                value: 'Fallback tone active until custom tone is repaired',
-                warning: true,
-              ),
-            ],
-            const SizedBox(height: 8),
-            InfoRow(label: 'Volume', value: alarm.volumeSummary),
-            if (alarm.hasSkippedOccurrence) ...[
-              const SizedBox(height: 8),
-              InfoRow(
-                label: 'Skip next',
-                value: formatSkippedOccurrenceLabel(
-                  alarm.skippedOccurrenceLocalDate!,
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            InfoRow(label: 'Dismiss', value: alarm.missionSummary),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                NeoSquareIconButton(
-                  icon: Icons.edit,
-                  size: 42,
-                  backgroundColor: NeoColors.panel,
-                  onPressed: () {
-                    onEdit();
-                  },
-                ),
-                const SizedBox(width: 10),
-                NeoSquareIconButton(
-                  icon: Icons.delete,
-                  size: 42,
-                  backgroundColor: NeoColors.warm,
-                  foregroundColor: Colors.red.shade700,
-                  onPressed: () {
-                    onDelete();
-                  },
-                ),
-                if (alarm.repeats) ...[
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: NeoActionButton(
-                      label: alarm.hasSkippedOccurrence ? 'Undo skip' : 'Skip next',
-                      compact: true,
-                      backgroundColor: alarm.hasSkippedOccurrence
-                          ? NeoColors.cyan
-                          : NeoColors.panel,
-                      onPressed: alarm.hasSkippedOccurrence
-                          ? () {
-                              onClearSkippedOccurrence();
-                            }
-                          : alarm.enabled
-                          ? () {
-                              onSkipNext();
-                            }
-                          : null,
+                    const SizedBox(height: 8),
+                    InfoRow(label: 'Tone', value: alarm.ringtoneSummary),
+                    if (alarm.hasCustomToneWarning) ...[
+                      const SizedBox(height: 8),
+                      const InfoRow(
+                        label: 'Tone status',
+                        value:
+                            'Fallback tone active until custom tone is repaired',
+                        warning: true,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    InfoRow(label: 'Volume', value: alarm.volumeSummary),
+                    if (alarm.hasPendingSkippedOccurrence) ...[
+                      const SizedBox(height: 8),
+                      InfoRow(
+                        label: 'Skip next',
+                        value: formatSkippedOccurrenceLabel(
+                          alarm.skippedOccurrenceLocalDate!,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    InfoRow(label: 'Dismiss', value: alarm.missionSummary),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        NeoSquareIconButton(
+                          icon: Icons.edit,
+                          size: 42,
+                          backgroundColor: NeoColors.panel,
+                          onPressed: () {
+                            widget.onEdit();
+                          },
+                        ),
+                        const SizedBox(width: 10),
+                        NeoSquareIconButton(
+                          icon: Icons.delete,
+                          size: 42,
+                          backgroundColor: NeoColors.warm,
+                          foregroundColor: Colors.red.shade700,
+                          onPressed: () {
+                            widget.onDelete();
+                          },
+                        ),
+                        if (alarm.repeats) ...[
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: NeoActionButton(
+                              label: alarm.hasPendingSkippedOccurrence
+                                  ? 'Undo skip'
+                                  : 'Skip next',
+                              compact: true,
+                              backgroundColor: alarm.hasPendingSkippedOccurrence
+                                  ? NeoColors.warm
+                                  : NeoColors.panel,
+                              onPressed: alarm.enabled
+                                  ? () {
+                                      if (alarm.hasPendingSkippedOccurrence) {
+                                        widget.onClearSkippedOccurrence();
+                                      } else {
+                                        widget.onSkipNext();
+                                      }
+                                    }
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ),
-                ],
-              ],
+                  ],
+                ),
+              ),
+              crossFadeState: _expanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 180),
+              sizeCurve: Curves.easeOutCubic,
             ),
           ],
         ),
       ),
     );
+  }
+
+  String? _displayLabel(
+    AlarmSpec alarm,
+    AlarmLocationTrigger? locationTrigger,
+  ) {
+    final normalized = alarm.label.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    if (normalized.toLowerCase() == 'alarm') {
+      return null;
+    }
+    if (alarm.isLocationAlarm &&
+        locationTrigger != null &&
+        normalized == locationTrigger.label.trim()) {
+      return null;
+    }
+    return normalized;
+  }
+
+  String _collapsedSummary(
+    BuildContext context,
+    AlarmSpec alarm,
+    DateTime? nextTrigger,
+    MaterialLocalizations localizations,
+  ) {
+    if (alarm.isLocationAlarm) {
+      final locationTrigger = alarm.locationTrigger;
+      final radius = locationTrigger?.radiusSummary ?? 'Not configured';
+      final status = locationTrigger?.health.label ?? 'Not evaluated';
+      return '$radius | $status';
+    }
+
+    final repeat = alarm.repeatSummary;
+    final next = nextTrigger == null
+        ? 'Not scheduled'
+        : '${weekdayLabel(nextTrigger.weekday)}, ${nextTrigger.month}/${nextTrigger.day} ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(nextTrigger), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context))}';
+    return '$repeat | $next';
+  }
+
+  String? _collapsedWarning(
+    AlarmSpec alarm,
+    AlarmLocationTrigger? locationTrigger,
+  ) {
+    if (alarm.hasCustomToneWarning) {
+      return 'Fallback tone active until custom tone is repaired.';
+    }
+    if (alarm.hasLocationWarning) {
+      return locationTrigger?.health.label ?? 'Location alarm needs attention.';
+    }
+    if (alarm.hasPendingSkippedOccurrence) {
+      return 'Skip next: ${formatSkippedOccurrenceLabel(alarm.skippedOccurrenceLocalDate!)}';
+    }
+    if (alarm.usesSpecificTimezone) {
+      return alarm.timezoneSummary;
+    }
+    return null;
   }
 }
 
@@ -577,18 +756,15 @@ String weekdayLabel(int weekday) {
 String? nextAlarmCountdownText(List<AlarmSpec> alarms) {
   final soonestAlarm = alarms
       .where((alarm) => alarm.enabled && alarm.nextTriggerAtLocal != null)
-      .fold<AlarmSpec?>(
-        null,
-        (currentSoonest, alarm) {
-          if (currentSoonest == null) {
-            return alarm;
-          }
+      .fold<AlarmSpec?>(null, (currentSoonest, alarm) {
+        if (currentSoonest == null) {
+          return alarm;
+        }
 
-          final currentTrigger = currentSoonest.nextTriggerAtLocal!;
-          final nextTrigger = alarm.nextTriggerAtLocal!;
-          return nextTrigger.isBefore(currentTrigger) ? alarm : currentSoonest;
-        },
-      );
+        final currentTrigger = currentSoonest.nextTriggerAtLocal!;
+        final nextTrigger = alarm.nextTriggerAtLocal!;
+        return nextTrigger.isBefore(currentTrigger) ? alarm : currentSoonest;
+      });
 
   if (soonestAlarm == null) {
     return null;

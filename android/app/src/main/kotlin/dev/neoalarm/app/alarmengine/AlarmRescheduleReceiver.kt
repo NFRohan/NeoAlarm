@@ -10,9 +10,15 @@ class AlarmRescheduleReceiver : BroadcastReceiver() {
             return
         }
 
-        runCatching {
-            AlarmScheduler(context, AlarmStore(context)).rescheduleAll()
-        }
+        val pendingResult = goAsync()
+        Thread {
+            runCatching {
+                val store = AlarmStore(context)
+                AlarmScheduler(context, store).rescheduleAll()
+                LocationAlarmCoordinator(context, store).syncAll()
+            }
+            pendingResult.finish()
+        }.start()
     }
 
     companion object {

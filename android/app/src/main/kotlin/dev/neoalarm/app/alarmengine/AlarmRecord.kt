@@ -10,8 +10,11 @@ data class AlarmRecord(
     val hour: Int,
     val minute: Int,
     val timezoneId: String,
+    val followsDeviceTimezone: Boolean = true,
     val enabled: Boolean,
     val weekdays: List<Int>,
+    val triggerKind: AlarmTriggerKind = AlarmTriggerKind.TIME,
+    val locationTrigger: LocationAlarmRecord? = null,
     val ringtoneId: String,
     val customToneId: String?,
     val volumeRampEnabled: Boolean,
@@ -29,8 +32,11 @@ data class AlarmRecord(
             "hour" to hour,
             "minute" to minute,
             "timezoneId" to timezoneId,
+            "followsDeviceTimezone" to followsDeviceTimezone,
             "enabled" to enabled,
             "weekdays" to weekdays,
+            "triggerKind" to triggerKind.id,
+            "locationTrigger" to locationTrigger?.toChannelMap(),
             "ringtoneId" to ringtoneId,
             "customToneId" to customToneId,
             "volumeRampEnabled" to volumeRampEnabled,
@@ -52,8 +58,11 @@ data class AlarmRecord(
             put("hour", hour)
             put("minute", minute)
             put("timezoneId", timezoneId)
+            put("followsDeviceTimezone", followsDeviceTimezone)
             put("enabled", enabled)
             put("weekdays", JSONArray().apply { weekdays.forEach(::put) })
+            put("triggerKind", triggerKind.id)
+            put("locationTrigger", locationTrigger?.toJson())
             put("ringtoneId", ringtoneId)
             put("customToneId", customToneId)
             put("volumeRampEnabled", volumeRampEnabled)
@@ -76,8 +85,11 @@ data class AlarmRecord(
                 hour = (raw["hour"] as Number).toInt(),
                 minute = (raw["minute"] as Number).toInt(),
                 timezoneId = raw["timezoneId"] as String,
+                followsDeviceTimezone = raw["followsDeviceTimezone"] as? Boolean ?: true,
                 enabled = raw["enabled"] as Boolean,
                 weekdays = weekdaysRaw.mapNotNull { (it as? Number)?.toInt() }.sorted(),
+                triggerKind = AlarmTriggerKind.fromId(raw["triggerKind"] as? String),
+                locationTrigger = (raw["locationTrigger"] as? Map<*, *>)?.let(LocationAlarmRecord::fromChannelMap),
                 ringtoneId = (raw["ringtoneId"] as? String) ?: "system_alarm",
                 customToneId = (raw["customToneId"] as? String)?.takeUnless { it.isBlank() },
                 volumeRampEnabled = raw["volumeRampEnabled"] as? Boolean ?: false,
@@ -116,8 +128,11 @@ data class AlarmRecord(
                 hour = json.getInt("hour"),
                 minute = json.getInt("minute"),
                 timezoneId = json.getString("timezoneId"),
+                followsDeviceTimezone = json.optBoolean("followsDeviceTimezone", true),
                 enabled = json.getBoolean("enabled"),
                 weekdays = weekdays,
+                triggerKind = AlarmTriggerKind.fromId(json.optString("triggerKind", AlarmTriggerKind.TIME.id)),
+                locationTrigger = json.optJSONObject("locationTrigger")?.let(LocationAlarmRecord::fromJson),
                 ringtoneId = json.optString("ringtoneId", "system_alarm"),
                 customToneId = json.optString("customToneId").takeUnless { it.isBlank() },
                 volumeRampEnabled = json.optBoolean("volumeRampEnabled", false),

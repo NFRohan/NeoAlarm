@@ -1,4 +1,5 @@
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
+import 'package:neoalarm/src/features/alarms/domain/alarm_location_trigger.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_mission.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,6 +11,7 @@ void main() {
       hour: 7,
       minute: 30,
       timezoneId: 'Asia/Dhaka',
+      followsDeviceTimezone: false,
       enabled: true,
       weekdays: const [
         AlarmWeekday.monday,
@@ -39,6 +41,7 @@ void main() {
     expect(roundTrip.hour, original.hour);
     expect(roundTrip.minute, original.minute);
     expect(roundTrip.timezoneId, original.timezoneId);
+    expect(roundTrip.followsDeviceTimezone, isFalse);
     expect(roundTrip.enabled, isTrue);
     expect(roundTrip.weekdays, original.weekdays);
     expect(roundTrip.ringtone, original.ringtone);
@@ -127,5 +130,101 @@ void main() {
     expect(alarm.extraLoudEnabled, isFalse);
     expect(alarm.skippedOccurrenceLocalDate, isNull);
     expect(alarm.volumeSummary, 'Full volume');
+  });
+
+  test('treats only future or same-day skipped dates as pending', () {
+    final pendingSkipAlarm = AlarmSpec(
+      id: 'alarm-pending-skip',
+      label: 'Commute',
+      hour: 7,
+      minute: 0,
+      timezoneId: 'UTC',
+      enabled: true,
+      weekdays: const [AlarmWeekday.monday, AlarmWeekday.tuesday],
+      ringtone: AlarmRingtone.systemAlarm,
+      customToneId: null,
+      customToneName: null,
+      customToneHealthy: true,
+      volumeRampEnabled: false,
+      extraLoudEnabled: false,
+      snoozeDurationMinutes: 9,
+      maxSnoozes: 3,
+      mission: const MissionSpec.none(),
+      nextTriggerAtUtc: null,
+      skippedOccurrenceLocalDate: '2099-01-01',
+    );
+
+    final staleSkipAlarm = pendingSkipAlarm.copyWith(
+      skippedOccurrenceLocalDate: '2000-01-01',
+    );
+
+    expect(pendingSkipAlarm.hasPendingSkippedOccurrence, isTrue);
+    expect(staleSkipAlarm.hasPendingSkippedOccurrence, isFalse);
+  });
+
+  test('summarizes specific timezones separately from device time', () {
+    final localAlarm = AlarmSpec.createDraft(timezoneId: 'Asia/Dhaka');
+    final anchoredAlarm = localAlarm.copyWith(
+      followsDeviceTimezone: false,
+      timezoneId: 'America/Toronto',
+    );
+
+    expect(localAlarm.timezoneSummary, 'Device time');
+    expect(anchoredAlarm.usesSpecificTimezone, isTrue);
+    expect(anchoredAlarm.timezoneSummary, 'Toronto time');
+  });
+
+  test('serializes and deserializes location alarm trigger config', () {
+    final original = AlarmSpec(
+      id: 'alarm-location-1',
+      label: 'Banani stop',
+      hour: 0,
+      minute: 0,
+      timezoneId: 'Asia/Dhaka',
+      enabled: true,
+      weekdays: const [],
+      ringtone: AlarmRingtone.systemAlarm,
+      customToneId: null,
+      customToneName: null,
+      customToneHealthy: true,
+      volumeRampEnabled: false,
+      extraLoudEnabled: false,
+      snoozeDurationMinutes: 9,
+      maxSnoozes: 0,
+      mission: const MissionSpec.none(),
+      nextTriggerAtUtc: null,
+      skippedOccurrenceLocalDate: null,
+      triggerKind: AlarmTriggerKind.location,
+      locationTrigger: AlarmLocationTrigger(
+        label: 'Banani Station',
+        latitude: 23.7937,
+        longitude: 90.4066,
+        radiusMeters: 1000,
+        health: AlarmLocationHealth.geofenceNotRegistered,
+        geofenceId: 'geo-1',
+        registeredAtUtc: DateTime.utc(2026, 3, 24, 12, 0),
+        lastTransitionAtUtc: DateTime.utc(2026, 3, 24, 12, 30),
+      ),
+    );
+
+    final roundTrip = AlarmSpec.fromMap(original.toMap());
+
+    expect(roundTrip.triggerKind, AlarmTriggerKind.location);
+    expect(roundTrip.isLocationAlarm, isTrue);
+    expect(roundTrip.repeatSummary, 'Location trigger');
+    expect(roundTrip.locationTrigger?.label, 'Banani Station');
+    expect(
+      roundTrip.locationTrigger?.health,
+      AlarmLocationHealth.geofenceNotRegistered,
+    );
+    expect(roundTrip.locationTrigger?.geofenceId, 'geo-1');
+    expect(
+      roundTrip.locationTrigger?.registeredAtUtc,
+      DateTime.utc(2026, 3, 24, 12, 0),
+    );
+    expect(
+      roundTrip.locationTrigger?.lastTransitionAtUtc,
+      DateTime.utc(2026, 3, 24, 12, 30),
+    );
   });
 }

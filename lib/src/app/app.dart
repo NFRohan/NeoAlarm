@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:neoalarm/src/core/theme/app_theme.dart';
 import 'package:neoalarm/src/features/alarms/application/active_alarm_session_controller.dart';
+import 'package:neoalarm/src/features/alarms/application/alarm_list_controller.dart';
 import 'package:neoalarm/src/features/alarms/presentation/active_alarm_screen.dart';
 import 'package:neoalarm/src/features/app_startup/application/app_startup_controller.dart';
 import 'package:neoalarm/src/features/dashboard/presentation/dashboard_screen.dart';
@@ -49,7 +52,11 @@ class _AlarmAppShellState extends ConsumerState<_AlarmAppShell>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(
+        ref.read(alarmRepositoryProvider).runLocationAlarmForegroundCheck(),
+      );
       ref.invalidate(appStartupContextProvider);
+      ref.invalidate(alarmListControllerProvider);
     }
   }
 

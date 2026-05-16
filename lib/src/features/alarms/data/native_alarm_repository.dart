@@ -1,10 +1,13 @@
 import 'package:neoalarm/src/features/alarms/data/alarm_repository.dart';
 import 'package:neoalarm/src/features/alarms/domain/active_alarm_session.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_engine_status.dart';
+import 'package:neoalarm/src/features/alarms/domain/alarm_location_trigger.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_mission.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_tone.dart';
 import 'package:neoalarm/src/features/app_startup/domain/app_startup_context.dart';
+import 'package:neoalarm/src/features/location_alarms/domain/current_location_snapshot.dart';
+import 'package:neoalarm/src/features/location_alarms/domain/location_alarm_setup_diagnostics.dart';
 import 'package:flutter/services.dart';
 
 class NativeAlarmRepository implements AlarmRepository {
@@ -98,6 +101,48 @@ class NativeAlarmRepository implements AlarmRepository {
   }
 
   @override
+  Future<void> requestForegroundLocationPermission() {
+    return _channel.invokeMethod<void>('requestForegroundLocationPermission');
+  }
+
+  @override
+  Future<void> requestBackgroundLocationPermission() {
+    return _channel.invokeMethod<void>('requestBackgroundLocationPermission');
+  }
+
+  @override
+  Future<void> openLocationSettings() {
+    return _channel.invokeMethod<void>('openLocationSettings');
+  }
+
+  @override
+  Future<CurrentLocationSnapshot?> getCurrentLocationSnapshot() async {
+    final raw = await _channel.invokeMapMethod<Object?, Object?>(
+      'getCurrentLocationSnapshot',
+    );
+    if (raw == null) {
+      return null;
+    }
+    return CurrentLocationSnapshot.fromMap(raw);
+  }
+
+  @override
+  Future<LocationAlarmSetupDiagnostics> evaluateLocationTrigger(
+    AlarmLocationTrigger trigger,
+  ) async {
+    final raw = await _channel.invokeMapMethod<Object?, Object?>(
+      'evaluateLocationTrigger',
+      trigger.toMap(),
+    );
+    return LocationAlarmSetupDiagnostics.fromMap(raw ?? const {});
+  }
+
+  @override
+  Future<void> runLocationAlarmForegroundCheck() {
+    return _channel.invokeMethod<void>('runLocationAlarmForegroundCheck');
+  }
+
+  @override
   Future<void> requestExactAlarmPermission() {
     return _channel.invokeMethod<void>('requestExactAlarmPermission');
   }
@@ -147,6 +192,28 @@ class NativeAlarmRepository implements AlarmRepository {
       {'id': id},
     );
     return AlarmSpec.fromMap(raw ?? const {});
+  }
+
+  @override
+  Future<List<String>> listAvailableTimezones() async {
+    final rawList =
+        await _channel.invokeListMethod<Object?>('listAvailableTimezones') ??
+        const [];
+    return rawList.cast<String>();
+  }
+
+  @override
+  Future<AlarmSpec> refreshLocationAlarm(String id) async {
+    final raw = await _channel.invokeMapMethod<Object?, Object?>(
+      'refreshLocationAlarm',
+      {'id': id},
+    );
+    return AlarmSpec.fromMap(raw ?? const {});
+  }
+
+  @override
+  Future<void> refreshLocationAlarms() {
+    return _channel.invokeMethod<void>('refreshLocationAlarms');
   }
 
   @override

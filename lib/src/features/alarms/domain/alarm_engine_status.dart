@@ -8,6 +8,9 @@ class AlarmEngineStatus {
     required this.hasStepSensor,
     required this.activityRecognitionGranted,
     required this.timezoneId,
+    this.locationServicesEnabled = false,
+    this.foregroundLocationGranted = false,
+    this.backgroundLocationGranted = false,
   });
 
   factory AlarmEngineStatus.fromMap(Map<Object?, Object?> raw) {
@@ -20,6 +23,9 @@ class AlarmEngineStatus {
       hasStepSensor: raw['hasStepSensor']! as bool,
       activityRecognitionGranted: raw['activityRecognitionGranted']! as bool,
       timezoneId: raw['timezoneId']! as String,
+      locationServicesEnabled: raw['locationServicesEnabled'] as bool? ?? false,
+      foregroundLocationGranted: raw['foregroundLocationGranted'] as bool? ?? false,
+      backgroundLocationGranted: raw['backgroundLocationGranted'] as bool? ?? false,
     );
   }
 
@@ -31,8 +37,17 @@ class AlarmEngineStatus {
   final bool hasStepSensor;
   final bool activityRecognitionGranted;
   final String timezoneId;
+  final bool locationServicesEnabled;
+  final bool foregroundLocationGranted;
+  final bool backgroundLocationGranted;
 
   bool get cameraReady => hasCamera && cameraPermissionGranted;
 
   bool get stepsMissionReady => hasStepSensor && activityRecognitionGranted;
+
+  bool get locationForegroundReady =>
+      locationServicesEnabled && foregroundLocationGranted;
+
+  bool get locationBackgroundReady =>
+      locationForegroundReady && backgroundLocationGranted;
 }

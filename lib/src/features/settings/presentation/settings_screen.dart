@@ -13,6 +13,9 @@ class SettingsScreen extends StatelessWidget {
     required this.onRequestExactAlarmAccess,
     required this.onRequestNotificationAccess,
     required this.onRequestBatteryOptimizationExemption,
+    required this.onOpenLocationSettings,
+    required this.onRequestForegroundLocationPermission,
+    required this.onRequestBackgroundLocationPermission,
     required this.onRequestCameraPermission,
     required this.onRequestActivityRecognitionPermission,
     required this.onRunOnboarding,
@@ -26,6 +29,9 @@ class SettingsScreen extends StatelessWidget {
   final VoidCallback onRequestExactAlarmAccess;
   final VoidCallback onRequestNotificationAccess;
   final VoidCallback onRequestBatteryOptimizationExemption;
+  final VoidCallback onOpenLocationSettings;
+  final VoidCallback onRequestForegroundLocationPermission;
+  final VoidCallback onRequestBackgroundLocationPermission;
   final VoidCallback onRequestCameraPermission;
   final VoidCallback onRequestActivityRecognitionPermission;
   final Future<void> Function() onRunOnboarding;
@@ -108,6 +114,11 @@ class SettingsScreen extends StatelessWidget {
             onRequestNotificationAccess: onRequestNotificationAccess,
             onRequestBatteryOptimizationExemption:
                 onRequestBatteryOptimizationExemption,
+            onOpenLocationSettings: onOpenLocationSettings,
+            onRequestForegroundLocationPermission:
+                onRequestForegroundLocationPermission,
+            onRequestBackgroundLocationPermission:
+                onRequestBackgroundLocationPermission,
             onRequestCameraPermission: onRequestCameraPermission,
             onRequestActivityRecognitionPermission:
                 onRequestActivityRecognitionPermission,
@@ -322,6 +333,9 @@ class _DeviceDiagnosticsSection extends StatelessWidget {
     required this.onRequestExactAlarmAccess,
     required this.onRequestNotificationAccess,
     required this.onRequestBatteryOptimizationExemption,
+    required this.onOpenLocationSettings,
+    required this.onRequestForegroundLocationPermission,
+    required this.onRequestBackgroundLocationPermission,
     required this.onRequestCameraPermission,
     required this.onRequestActivityRecognitionPermission,
   });
@@ -330,6 +344,9 @@ class _DeviceDiagnosticsSection extends StatelessWidget {
   final VoidCallback onRequestExactAlarmAccess;
   final VoidCallback onRequestNotificationAccess;
   final VoidCallback onRequestBatteryOptimizationExemption;
+  final VoidCallback onOpenLocationSettings;
+  final VoidCallback onRequestForegroundLocationPermission;
+  final VoidCallback onRequestBackgroundLocationPermission;
   final VoidCallback onRequestCameraPermission;
   final VoidCallback onRequestActivityRecognitionPermission;
 
@@ -347,7 +364,7 @@ class _DeviceDiagnosticsSection extends StatelessWidget {
               const NeoSectionTitle(
                 title: 'Device readiness',
                 subtitle:
-                    'Exact alarms, notifications, battery behavior, camera access, and step tracking.',
+                    'Exact alarms, location alarms, battery behavior, camera access, and step tracking.',
               ),
               const SizedBox(height: 18),
               _DiagnosticTile(
@@ -402,6 +419,60 @@ class _DeviceDiagnosticsSection extends StatelessWidget {
                 onAction: status.batteryOptimizationIgnored
                     ? null
                     : onRequestBatteryOptimizationExemption,
+              ),
+              const SizedBox(height: 12),
+              _DiagnosticTile(
+                icon: Icons.location_on,
+                title: 'Location services',
+                statusLabel: status.locationServicesEnabled ? 'Ready' : 'Fix',
+                detail: status.locationServicesEnabled
+                    ? 'System location services are enabled.'
+                    : 'Location alarms need Android location services turned on.',
+                accent: status.locationServicesEnabled
+                    ? NeoColors.success
+                    : NeoColors.orange,
+                actionLabel: status.locationServicesEnabled
+                    ? 'Ready'
+                    : 'Open settings',
+                onAction: status.locationServicesEnabled
+                    ? null
+                    : onOpenLocationSettings,
+              ),
+              const SizedBox(height: 12),
+              _DiagnosticTile(
+                icon: Icons.my_location,
+                title: 'Foreground location',
+                statusLabel: status.foregroundLocationGranted ? 'Ready' : 'Fix',
+                detail: status.foregroundLocationGranted
+                    ? 'Foreground location access is granted.'
+                    : 'Grant foreground location so NeoAlarm can evaluate and set up location alarms cleanly.',
+                accent: status.foregroundLocationGranted
+                    ? NeoColors.success
+                    : NeoColors.orange,
+                actionLabel: status.foregroundLocationGranted
+                    ? 'Ready'
+                    : 'Allow',
+                onAction: status.foregroundLocationGranted
+                    ? null
+                    : onRequestForegroundLocationPermission,
+              ),
+              const SizedBox(height: 12),
+              _DiagnosticTile(
+                icon: Icons.pin_drop,
+                title: 'Background location',
+                statusLabel: status.backgroundLocationGranted ? 'Ready' : 'Fix',
+                detail: status.backgroundLocationGranted
+                    ? 'Background location access is granted for armed location alarms.'
+                    : 'Grant background location so destination alarms can trigger while the app is not open.',
+                accent: status.backgroundLocationGranted
+                    ? NeoColors.success
+                    : NeoColors.orange,
+                actionLabel: status.backgroundLocationGranted
+                    ? 'Ready'
+                    : 'Allow',
+                onAction: status.backgroundLocationGranted
+                    ? null
+                    : onRequestBackgroundLocationPermission,
               ),
               const SizedBox(height: 12),
               _DiagnosticTile(

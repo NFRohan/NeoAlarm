@@ -6,12 +6,16 @@ import 'package:neoalarm/src/features/alarms/application/alarm_list_controller.d
 import 'package:neoalarm/src/features/alarms/domain/alarm_countdown_formatter.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_mission.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_engine_status.dart';
+import 'package:neoalarm/src/features/alarms/domain/alarm_location_trigger.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_tone.dart';
+import 'package:neoalarm/src/features/alarms/domain/alarm_timezone.dart';
 import 'package:neoalarm/src/features/alarms/presentation/qr_target_capture_screen.dart';
 import 'package:neoalarm/src/features/alarms/presentation/widgets/alarm_custom_tone_panel.dart';
 import 'package:neoalarm/src/features/alarms/presentation/widgets/alarm_editor_widgets.dart';
 import 'package:neoalarm/src/features/alarms/presentation/widgets/alarm_time_picker_sheet.dart';
+import 'package:neoalarm/src/features/alarms/presentation/widgets/alarm_timezone_picker_sheet.dart';
+import 'package:neoalarm/src/features/location_alarms/presentation/location_alarm_setup_screen.dart';
 import 'package:neoalarm/src/features/missions/application/mission_registry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,7 +50,10 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
   late final TextEditingController _labelController;
   late TimeOfDay _time;
   late bool _enabled;
+  late bool _followsDeviceTimezone;
+  late String _timezoneId;
   late Set<AlarmWeekday> _selectedWeekdays;
+  late AlarmLocationTrigger? _locationTrigger;
   late AlarmRingtone _ringtone;
   late String? _selectedCustomToneId;
   late bool _volumeRampEnabled;
@@ -55,7 +62,9 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
   late int _maxSnoozes;
   late MissionSpec _mission;
   List<AlarmTone> _customTones = const [];
+  List<String> _availableTimezones = const [];
   bool _tonesLoading = true;
+  bool _timezonesLoading = false;
   String? _toneLibraryError;
   Timer? _countdownTicker;
 
@@ -65,7 +74,10 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
     _labelController = TextEditingController(text: widget.alarm.label);
     _time = TimeOfDay(hour: widget.alarm.hour, minute: widget.alarm.minute);
     _enabled = widget.alarm.enabled;
+    _followsDeviceTimezone = widget.alarm.followsDeviceTimezone;
+    _timezoneId = widget.alarm.timezoneId;
     _selectedWeekdays = widget.alarm.weekdays.toSet();
+    _locationTrigger = widget.alarm.locationTrigger;
     _ringtone = widget.alarm.ringtone;
     _selectedCustomToneId = widget.alarm.customToneId;
     _volumeRampEnabled = widget.alarm.volumeRampEnabled;
@@ -94,6 +106,8 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
     final mediaQuery = MediaQuery.of(context);
     final diagnostics = widget.engineStatus;
     final missionRegistry = ref.read(missionRegistryProvider);
+    final isLocationAlarm = widget.alarm.isLocationAlarm;
+    final locationTrigger = _locationTrigger;
     final availableMissionTypes = missionRegistry.editorMissionTypes(
       diagnostics: diagnostics,
     );
@@ -148,62 +162,140 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
                   ],
                 ),
               ),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-                decoration: BoxDecoration(
-                  color: Color(0x22FFFF00),
-                  border: Border(
-                    top: BorderSide(color: NeoColors.ink, width: 3),
-                    bottom: BorderSide(color: NeoColors.ink, width: 3),
+              if (isLocationAlarm)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                  decoration: BoxDecoration(
+                    color: Color(0x2200D1FF),
+                    border: Border(
+                      top: BorderSide(color: NeoColors.ink, width: 3),
+                      bottom: BorderSide(color: NeoColors.ink, width: 3),
+                    ),
                   ),
-                ),
-                child: InkWell(
-                  onTap: _pickTime,
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          AlarmTimeBlock(
-                            label: _time.hourOfPeriod.toString().padLeft(2, '0'),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(':', style: theme.textTheme.displayMedium),
-                          ),
-                          AlarmTimeBlock(
-                            label: _time.minute.toString().padLeft(2, '0'),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            children: [
-                              AlarmPeriodChip(label: 'AM', active: amPmLabel == 'AM'),
-                              const SizedBox(height: 8),
-                              AlarmPeriodChip(label: 'PM', active: amPmLabel == 'PM'),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
                       Text(
-                        alarmPreviewText,
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.titleMedium?.copyWith(
+                        'LOCATION ALARM',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        locationTrigger?.label ?? 'Destination not configured',
+                        style: theme.textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        locationTrigger == null
+                            ? 'Pick a destination before saving this alarm.'
+                            : '${locationTrigger.radiusSummary} | ${locationTrigger.health.label}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
                           color: NeoColors.subtext,
                         ),
                       ),
+                      if (locationTrigger != null) ...[
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: NeoActionButton(
+                                label: 'Change destination',
+                                compact: true,
+                                backgroundColor: NeoColors.primary,
+                                onPressed: _editLocationTrigger,
+                              ),
+                            ),
+                            if (locationTrigger.health ==
+                                AlarmLocationHealth.geofenceNotRegistered) ...[
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: NeoActionButton(
+                                  label: 'Retry arming',
+                                  compact: true,
+                                  backgroundColor: NeoColors.cyan,
+                                  onPressed: _retryLocationAlarm,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ],
                   ),
+                )
+              else
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                  decoration: BoxDecoration(
+                    color: Color(0x22FFFF00),
+                    border: Border(
+                      top: BorderSide(color: NeoColors.ink, width: 3),
+                      bottom: BorderSide(color: NeoColors.ink, width: 3),
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: _pickTime,
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            AlarmTimeBlock(
+                              label: _time.hourOfPeriod.toString().padLeft(
+                                2,
+                                '0',
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: Text(
+                                ':',
+                                style: theme.textTheme.displayMedium,
+                              ),
+                            ),
+                            AlarmTimeBlock(
+                              label: _time.minute.toString().padLeft(2, '0'),
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              children: [
+                                AlarmPeriodChip(
+                                  label: 'AM',
+                                  active: amPmLabel == 'AM',
+                                ),
+                                const SizedBox(height: 8),
+                                AlarmPeriodChip(
+                                  label: 'PM',
+                                  active: amPmLabel == 'PM',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          alarmPreviewText,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: NeoColors.subtext,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (diagnostics != null &&
+                      if (!isLocationAlarm &&
+                          diagnostics != null &&
                           !diagnostics.canScheduleExactAlarms) ...[
                         const AlarmEditorWarning(
                           title: 'Exact alarms are not ready',
@@ -221,29 +313,174 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
                           border: OutlineInputBorder(),
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      Text('REPEAT', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: AlarmWeekday.values
-                            .map(
-                              (weekday) => NeoDayChip(
-                                label: weekday.shortLabel.substring(0, 1),
-                                selected: _selectedWeekdays.contains(weekday),
-                                onTap: () {
+                      if (isLocationAlarm && locationTrigger != null) ...[
+                        const SizedBox(height: 18),
+                        AlarmEditorSelector(
+                          title: 'DESTINATION DETAILS',
+                          child: NeoPanel(
+                            color: NeoColors.panel,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                AlarmEditorInfoRow(
+                                  label: 'Radius',
+                                  value: locationTrigger.radiusSummary,
+                                ),
+                                const SizedBox(height: 10),
+                                AlarmEditorInfoRow(
+                                  label: 'Status',
+                                  value: locationTrigger.health.label,
+                                ),
+                                const SizedBox(height: 10),
+                                AlarmEditorInfoRow(
+                                  label: 'Mode',
+                                  value:
+                                      'One-shot arrival alarm near the saved destination.',
+                                ),
+                                if (!locationTrigger.isHealthy &&
+                                    locationTrigger.health !=
+                                        AlarmLocationHealth
+                                            .geofenceNotRegistered) ...[
+                                  const SizedBox(height: 14),
+                                  Text(
+                                    'Device readiness for location alarms now lives in Settings.',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: NeoColors.subtext,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 18),
+                        Text('REPEAT', style: theme.textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: AlarmWeekday.values
+                              .map(
+                                (weekday) => NeoDayChip(
+                                  label: weekday.shortLabel.substring(0, 1),
+                                  selected: _selectedWeekdays.contains(weekday),
+                                  onTap: () {
+                                    setState(() {
+                                      if (_selectedWeekdays.contains(weekday)) {
+                                        _selectedWeekdays.remove(weekday);
+                                      } else {
+                                        _selectedWeekdays.add(weekday);
+                                      }
+                                    });
+                                  },
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
+                      ],
+                      if (!isLocationAlarm) ...[
+                        const SizedBox(height: 18),
+                        AlarmEditorSelector(
+                          title: 'TIME ZONE',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              DropdownButtonFormField<_AlarmTimezoneMode>(
+                                initialValue: _followsDeviceTimezone
+                                    ? _AlarmTimezoneMode.device
+                                    : _AlarmTimezoneMode.specific,
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                ),
+                                icon: const Icon(Icons.expand_more),
+                                items: const [
+                                  DropdownMenuItem<_AlarmTimezoneMode>(
+                                    value: _AlarmTimezoneMode.device,
+                                    child: Text('DEVICE TIME'),
+                                  ),
+                                  DropdownMenuItem<_AlarmTimezoneMode>(
+                                    value: _AlarmTimezoneMode.specific,
+                                    child: Text('SPECIFIC TIMEZONE'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value == null) {
+                                    return;
+                                  }
+
                                   setState(() {
-                                    if (_selectedWeekdays.contains(weekday)) {
-                                      _selectedWeekdays.remove(weekday);
-                                    } else {
-                                      _selectedWeekdays.add(weekday);
+                                    _followsDeviceTimezone =
+                                        value == _AlarmTimezoneMode.device;
+                                    if (_followsDeviceTimezone) {
+                                      _timezoneId = _deviceTimezoneId;
                                     }
                                   });
                                 },
                               ),
-                            )
-                            .toList(growable: false),
-                      ),
+                              const SizedBox(height: 10),
+                              Text(
+                                _followsDeviceTimezone
+                                    ? 'Follows your phone timezone when you travel.'
+                                    : 'Stays pinned to the selected timezone. Useful for reminders like 9:00 AM Toronto time.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: NeoColors.subtext,
+                                ),
+                              ),
+                              if (!_followsDeviceTimezone) ...[
+                                const SizedBox(height: 12),
+                                InkWell(
+                                  onTap: _pickTimezone,
+                                  child: NeoPanel(
+                                    color: NeoColors.panel,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 14,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                formatTimezoneSummary(
+                                                  _timezoneId,
+                                                ).toUpperCase(),
+                                                style:
+                                                    theme.textTheme.titleMedium,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                _timezoneId,
+                                                style: theme.textTheme.bodySmall
+                                                    ?.copyWith(
+                                                      color: NeoColors.subtext,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        if (_timezonesLoading)
+                                          const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.4,
+                                            ),
+                                          )
+                                        else
+                                          const Icon(Icons.travel_explore),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 18),
                       AlarmEditorSelector(
                         title: 'RINGTONE',
@@ -288,7 +525,9 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
                             });
                           },
                           onImportTone: _importCustomTone,
-                          onManageTones: _customTones.isEmpty ? null : _manageCustomTones,
+                          onManageTones: _customTones.isEmpty
+                              ? null
+                              : _manageCustomTones,
                         ),
                       ],
                       const SizedBox(height: 14),
@@ -508,7 +747,7 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
                               const SizedBox(height: 10),
                               Text(
                                 _mission.hasQrTarget
-                              ? 'A QR target is saved for this alarm.'
+                                    ? 'A QR target is saved for this alarm.'
                                     : 'Scan the QR code this alarm should require before saving.',
                                 style: theme.textTheme.bodyMedium,
                               ),
@@ -641,10 +880,24 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
       return;
     }
 
-    if (_ringtone == AlarmRingtone.customTone && _selectedCustomToneId == null) {
+    if (widget.alarm.isLocationAlarm && _locationTrigger == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Import or select a custom tone before saving this alarm.'),
+          content: Text(
+            'Pick a destination before saving this location alarm.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (_ringtone == AlarmRingtone.customTone &&
+        _selectedCustomToneId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Import or select a custom tone before saving this alarm.',
+          ),
         ),
       );
       return;
@@ -656,12 +909,15 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
     Navigator.of(context).pop(
       widget.alarm.copyWith(
         label: _labelController.text.trim().isEmpty
-            ? 'Alarm'
+            ? (_locationTrigger?.label ?? 'Alarm')
             : _labelController.text.trim(),
         hour: _time.hour,
         minute: _time.minute,
+        timezoneId: _followsDeviceTimezone ? _deviceTimezoneId : _timezoneId,
+        followsDeviceTimezone: _followsDeviceTimezone,
         enabled: _enabled,
         weekdays: normalizedWeekdays,
+        locationTrigger: _locationTrigger,
         ringtone: _ringtone,
         customToneId: _selectedCustomToneId,
         clearCustomToneId: _ringtone != AlarmRingtone.customTone,
@@ -673,6 +929,55 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
         clearNextTriggerAtUtc: true,
       ),
     );
+  }
+
+  Future<void> _editLocationTrigger() async {
+    final existingTrigger = _locationTrigger;
+    final nextTrigger = await LocationAlarmSetupScreen.show(
+      context,
+      initialTrigger: existingTrigger,
+    );
+
+    if (!mounted || nextTrigger == null) {
+      return;
+    }
+
+    final currentLabel = _labelController.text.trim();
+    final previousLocationLabel = existingTrigger?.label.trim();
+    final shouldFollowDestinationLabel =
+        currentLabel.isEmpty ||
+        currentLabel == 'Alarm' ||
+        (previousLocationLabel != null &&
+            currentLabel == previousLocationLabel);
+
+    setState(() {
+      _locationTrigger = nextTrigger;
+      if (shouldFollowDestinationLabel) {
+        _labelController.text = nextTrigger.label;
+      }
+    });
+  }
+
+  Future<void> _retryLocationAlarm() async {
+    try {
+      final refreshed = await ref
+          .read(alarmRepositoryProvider)
+          .refreshLocationAlarm(widget.alarm.id);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _locationTrigger = refreshed.locationTrigger;
+      });
+      ref.invalidate(alarmListControllerProvider);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to retry arming: $error')));
+    }
   }
 
   _MissionOption _missionOptionFor(
@@ -756,9 +1061,71 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
     }
   }
 
+  String get _deviceTimezoneId =>
+      widget.engineStatus?.timezoneId.isNotEmpty == true
+      ? widget.engineStatus!.timezoneId
+      : widget.alarm.timezoneId;
+
+  Future<void> _ensureAvailableTimezonesLoaded() async {
+    if (_availableTimezones.isNotEmpty || _timezonesLoading) {
+      return;
+    }
+
+    setState(() {
+      _timezonesLoading = true;
+    });
+
+    try {
+      final timezones = await ref
+          .read(alarmRepositoryProvider)
+          .listAvailableTimezones();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _availableTimezones = timezones;
+        _timezonesLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _timezonesLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to load timezones: $error')),
+      );
+    }
+  }
+
+  Future<void> _pickTimezone() async {
+    await _ensureAvailableTimezonesLoaded();
+    if (!mounted || _availableTimezones.isEmpty) {
+      return;
+    }
+
+    final selected = await AlarmTimezonePickerSheet.show(
+      context,
+      timezones: _availableTimezones,
+      initialTimezoneId: _timezoneId,
+      currentTimezoneId: _deviceTimezoneId,
+    );
+
+    if (!mounted || selected == null) {
+      return;
+    }
+
+    setState(() {
+      _timezoneId = selected;
+    });
+  }
+
   Future<void> _importCustomTone() async {
     try {
-      final imported = await ref.read(alarmRepositoryProvider).importCustomTone();
+      final imported = await ref
+          .read(alarmRepositoryProvider)
+          .importCustomTone();
       if (!mounted || imported == null) {
         return;
       }
@@ -798,6 +1165,8 @@ class _AlarmEditorSheetState extends ConsumerState<AlarmEditorSheet> {
     );
   }
 }
+
+enum _AlarmTimezoneMode { device, specific }
 
 class _MissionOption {
   const _MissionOption({

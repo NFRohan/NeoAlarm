@@ -39,6 +39,7 @@ class NeoActionButton extends StatelessWidget {
     this.padding = const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
     this.compact = false,
     this.expand = false,
+    this.suppressSplash = false,
     super.key,
   });
 
@@ -49,6 +50,7 @@ class NeoActionButton extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final bool compact;
   final bool expand;
+  final bool suppressSplash;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +67,10 @@ class NeoActionButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onPressed,
+        splashFactory: suppressSplash ? NoSplash.splashFactory : null,
+        highlightColor: suppressSplash ? Colors.transparent : null,
+        splashColor: suppressSplash ? Colors.transparent : null,
+        hoverColor: suppressSplash ? Colors.transparent : null,
         child: Container(
           decoration: BoxDecoration(
             color: resolvedBackground,

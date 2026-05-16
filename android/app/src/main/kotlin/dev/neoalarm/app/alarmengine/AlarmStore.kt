@@ -32,7 +32,16 @@ class AlarmStore(context: Context) {
     }
 
     fun upsert(record: AlarmRecord): AlarmRecord {
-        val updated = getAll().filterNot { it.id == record.id } + record
+        val current = getAll()
+        val existingIndex = current.indexOfFirst { it.id == record.id }
+        val updated = current.toMutableList()
+
+        if (existingIndex >= 0) {
+            updated[existingIndex] = record
+        } else {
+            updated.add(record)
+        }
+
         replaceAll(updated)
         return record
     }

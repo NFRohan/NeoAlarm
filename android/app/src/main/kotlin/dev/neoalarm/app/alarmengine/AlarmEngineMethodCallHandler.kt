@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -38,8 +39,10 @@ class AlarmEngineMethodCallHandler(
     private val toneLibraryManager = ToneLibraryManager(appContext, toneLibraryStore)
     private val ringSessionStore = RingSessionStore(appContext)
     private val scheduler = AlarmScheduler(appContext, store)
+    private val locationAlarmCoordinator = LocationAlarmCoordinator(appContext, store)
     private val packageManager = appContext.packageManager
     private val sensorManager = appContext.getSystemService(SensorManager::class.java)
+    private val locationManager = appContext.getSystemService(LocationManager::class.java)
     private val powerManager = appContext.getSystemService(PowerManager::class.java)
     private val userManager = appContext.getSystemService(UserManager::class.java)
     private val workerExecutor = Executors.newSingleThreadExecutor()
@@ -88,6 +91,9 @@ class AlarmEngineMethodCallHandler(
                         "cameraPermissionGranted" to isPermissionGranted(Manifest.permission.CAMERA),
                         "hasStepSensor" to hasStepSensor(),
                         "activityRecognitionGranted" to isActivityRecognitionGranted(),
+                        "locationServicesEnabled" to isLocationServicesEnabled(),
+                        "foregroundLocationGranted" to isForegroundLocationGranted(),
+                        "backgroundLocationGranted" to isBackgroundLocationGranted(),
                         "timezoneId" to ZoneId.systemDefault().id,
                     ),
                 )
@@ -99,13 +105,11 @@ class AlarmEngineMethodCallHandler(
                 )
 
                 "listAlarms" -> result.success(
-                    store.getAll()
-                        .sortedWith(
-                            compareBy<AlarmRecord> { it.nextTriggerAtEpochMillis ?: Long.MAX_VALUE }
-                                .thenBy { it.hour }
-                                .thenBy { it.minute },
-                        )
-                        .map(::alarmToChannelMap),
+                    store.getAll().map(::alarmToChannelMap),
+                )
+
+                "listAvailableTimezones" -> result.success(
+                    ZoneId.getAvailableZoneIds().sorted(),
                 )
 
                 "getActiveSession" -> {
@@ -122,7 +126,16 @@ class AlarmEngineMethodCallHandler(
                     val raw = call.arguments as? Map<*, *>
                         ?: throw IllegalArgumentException("Alarm payload missing.")
                     val record = AlarmRecord.fromChannelMap(raw)
-                    result.success(alarmToChannelMap(scheduler.upsert(record)))
+                    if (record.triggerKind == AlarmTriggerKind.LOCATION) {
+                        runOnWorker(result) {
+                            val updated = locationAlarmCoordinator.sync(store.upsert(record))
+                            mainHandler.post {
+                                result.success(alarmToChannelMap(updated))
+                            }
+                        }
+                    } else {
+                        result.success(alarmToChannelMap(scheduler.upsert(record)))
+                    }
                 }
 
                 "setAlarmEnabled" -> {
@@ -132,7 +145,17 @@ class AlarmEngineMethodCallHandler(
                         ?: throw IllegalArgumentException("Alarm id missing.")
                     val enabled = raw["enabled"] as? Boolean
                         ?: throw IllegalArgumentException("Enabled flag missing.")
-                    result.success(alarmToChannelMap(scheduler.updateEnabled(id, enabled)))
+                    val updated = scheduler.updateEnabled(id, enabled)
+                    if (updated.triggerKind == AlarmTriggerKind.LOCATION) {
+                        runOnWorker(result) {
+                            val synced = locationAlarmCoordinator.sync(updated)
+                            mainHandler.post {
+                                result.success(alarmToChannelMap(synced))
+                            }
+                        }
+                    } else {
+                        result.success(alarmToChannelMap(updated))
+                    }
                 }
 
                 "skipNextOccurrence" -> {
@@ -149,6 +172,42 @@ class AlarmEngineMethodCallHandler(
                     val id = raw["id"] as? String
                         ?: throw IllegalArgumentException("Alarm id missing.")
                     result.success(alarmToChannelMap(scheduler.clearSkippedOccurrence(id)))
+                }
+
+                "refreshLocationAlarm" -> {
+                    val raw = call.arguments as? Map<*, *>
+                        ?: throw IllegalArgumentException("Location-refresh payload missing.")
+                    val id = raw["id"] as? String
+                        ?: throw IllegalArgumentException("Alarm id missing.")
+                    val current = store.get(id)
+                        ?: throw IllegalArgumentException("Alarm not found: $id")
+                    if (current.triggerKind != AlarmTriggerKind.LOCATION) {
+                        throw IllegalStateException("Refresh is only available for location alarms.")
+                    }
+                    runOnWorker(result) {
+                        val updated = locationAlarmCoordinator.sync(current)
+                        mainHandler.post {
+                            result.success(alarmToChannelMap(updated))
+                        }
+                    }
+                }
+
+                "refreshLocationAlarms" -> {
+                    runOnWorker(result) {
+                        locationAlarmCoordinator.syncAll()
+                        mainHandler.post {
+                            result.success(null)
+                        }
+                    }
+                }
+
+                "getCurrentLocationSnapshot" -> {
+                    runOnWorker(result) {
+                        val snapshot = locationAlarmCoordinator.currentLocationSnapshotMap()
+                        mainHandler.post {
+                            result.success(snapshot)
+                        }
+                    }
                 }
 
                 "listCustomTones" -> {
@@ -180,13 +239,28 @@ class AlarmEngineMethodCallHandler(
                         ?: throw IllegalArgumentException("Delete payload missing.")
                     val id = raw["id"] as? String
                         ?: throw IllegalArgumentException("Alarm id missing.")
-                    scheduler.delete(id)
-                    result.success(null)
+                    val existing = store.get(id)
+                    if (existing?.triggerKind == AlarmTriggerKind.LOCATION) {
+                        runOnWorker(result) {
+                            locationAlarmCoordinator.delete(id)
+                            mainHandler.post {
+                                result.success(null)
+                            }
+                        }
+                    } else {
+                        scheduler.delete(id)
+                        result.success(null)
+                    }
                 }
 
                 "rescheduleAll" -> {
-                    scheduler.rescheduleAll()
-                    result.success(null)
+                    runOnWorker(result) {
+                        scheduler.rescheduleAll()
+                        locationAlarmCoordinator.syncAll()
+                        mainHandler.post {
+                            result.success(null)
+                        }
+                    }
                 }
 
                 "dismissActiveSession" -> {
@@ -343,6 +417,74 @@ class AlarmEngineMethodCallHandler(
                     result.success(null)
                 }
 
+                "requestForegroundLocationPermission" -> {
+                    if (!isForegroundLocationGranted()) {
+                        requestRuntimePermissionOrOpenSettings(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            REQUEST_FOREGROUND_LOCATION_CODE,
+                            KEY_FOREGROUND_LOCATION_REQUESTED,
+                        )
+                    }
+                    result.success(null)
+                }
+
+                "requestBackgroundLocationPermission" -> {
+                    if (!isForegroundLocationGranted()) {
+                        requestRuntimePermissionOrOpenSettings(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            REQUEST_FOREGROUND_LOCATION_CODE,
+                            KEY_FOREGROUND_LOCATION_REQUESTED,
+                        )
+                        result.success(null)
+                        return
+                    }
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                        !isBackgroundLocationGranted()
+                    ) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            openAppDetailsSettings()
+                        } else {
+                            requestRuntimePermissionOrOpenSettings(
+                                Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                                REQUEST_BACKGROUND_LOCATION_CODE,
+                                KEY_BACKGROUND_LOCATION_REQUESTED,
+                            )
+                        }
+                    }
+                    result.success(null)
+                }
+
+                "evaluateLocationTrigger" -> {
+                    val raw = call.arguments as? Map<*, *>
+                        ?: throw IllegalArgumentException("Location trigger payload missing.")
+                    val trigger = LocationAlarmRecord.fromChannelMap(raw)
+                    runOnWorker(result) {
+                        val diagnostics = locationAlarmCoordinator.evaluateDraft(trigger)
+                        mainHandler.post {
+                            result.success(diagnostics)
+                        }
+                    }
+                }
+
+                "runLocationAlarmForegroundCheck" -> {
+                    runOnWorker(result) {
+                        locationAlarmCoordinator.runForegroundFallbackCheck()
+                        mainHandler.post {
+                            result.success(null)
+                        }
+                    }
+                }
+
+                "openLocationSettings" -> {
+                    appContext.startActivity(
+                        Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        },
+                    )
+                    result.success(null)
+                }
+
                 else -> result.notImplemented()
             }
         } catch (error: ExactAlarmPermissionException) {
@@ -386,6 +528,22 @@ class AlarmEngineMethodCallHandler(
         } else {
             true
         }
+    }
+
+    private fun isForegroundLocationGranted(): Boolean {
+        return isPermissionGranted(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    private fun isBackgroundLocationGranted(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            isPermissionGranted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        } else {
+            isForegroundLocationGranted()
+        }
+    }
+
+    private fun isLocationServicesEnabled(): Boolean {
+        return locationManager?.isLocationEnabled ?: false
     }
 
     private fun isPermissionGranted(permission: String): Boolean {
@@ -455,12 +613,35 @@ class AlarmEngineMethodCallHandler(
         )
     }
 
+    private fun runOnWorker(
+        result: MethodChannel.Result,
+        task: () -> Unit,
+    ) {
+        workerExecutor.execute {
+            try {
+                task()
+            } catch (error: ExactAlarmPermissionException) {
+                mainHandler.post {
+                    result.error("exact_alarm_denied", error.message, null)
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    result.error("alarm_engine_error", error.message, null)
+                }
+            }
+        }
+    }
+
     companion object {
         private const val KEY_ACTIVITY_RECOGNITION_REQUESTED = "activity_recognition_requested"
+        private const val KEY_BACKGROUND_LOCATION_REQUESTED = "background_location_requested"
         private const val KEY_CAMERA_REQUESTED = "camera_requested"
+        private const val KEY_FOREGROUND_LOCATION_REQUESTED = "foreground_location_requested"
         private const val PERMISSION_PREFS_NAME = "alarm_engine_permission_prompts"
         private const val REQUEST_ACTIVITY_RECOGNITION_CODE = 1003
+        private const val REQUEST_BACKGROUND_LOCATION_CODE = 1005
         private const val REQUEST_CAMERA_CODE = 1002
+        private const val REQUEST_FOREGROUND_LOCATION_CODE = 1004
         private const val REQUEST_NOTIFICATIONS_CODE = 1001
     }
 }

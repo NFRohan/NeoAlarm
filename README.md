@@ -206,7 +206,7 @@ Security and release decisions are tracked in the ADR set under [docs/adr](docs/
 
 - Flutter `3.41.x` or newer on the stable channel
 - Android SDK configured locally
-- Java 17-compatible Android build environment
+- Java 21-compatible Android build environment
 - a physical Android device is strongly recommended for real validation
 
 ### Local Setup

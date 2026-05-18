@@ -1,108 +1,44 @@
 package dev.neoalarm.app.alarmengine
 
-import android.Manifest
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.hardware.Sensor
-import android.hardware.SensorManager
-import android.location.LocationManager
-import android.net.Uri
-import android.os.Build
-import android.os.PowerManager
-import android.os.UserManager
-import android.provider.Settings
-import androidx.activity.ComponentActivity
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
+import android.os.Handler
+import android.os.Looper
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
-import android.os.Handler
-import android.os.Looper
 import java.time.ZoneId
 
 class AlarmEngineMethodCallHandler(
     context: Context,
-    private val activity: Activity?,
+    activity: Activity?,
 ) : MethodChannel.MethodCallHandler {
-    private val permissionPreferences = context.applicationContext.getSharedPreferences(
-        PERMISSION_PREFS_NAME,
-        Context.MODE_PRIVATE,
-    )
     private val appContext = context.applicationContext
     private val store = AlarmStore(appContext)
-    private val toneLibraryStore = ToneLibraryStore(appContext)
-    private val toneLibraryManager = ToneLibraryManager(appContext, toneLibraryStore)
     private val ringSessionStore = RingSessionStore(appContext)
     private val scheduler = AlarmScheduler(appContext, store)
     private val locationAlarmCoordinator = LocationAlarmCoordinator(appContext, store)
-    private val packageManager = appContext.packageManager
-    private val sensorManager = appContext.getSystemService(SensorManager::class.java)
-    private val locationManager = appContext.getSystemService(LocationManager::class.java)
-    private val powerManager = appContext.getSystemService(PowerManager::class.java)
-    private val userManager = appContext.getSystemService(UserManager::class.java)
     private val workerExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var pendingToneImportResult: MethodChannel.Result? = null
-    private val toneImportLauncher =
-        (activity as? ComponentActivity)?.registerForActivityResult(
-            ActivityResultContracts.OpenDocument(),
-        ) { uri ->
-            val callback = pendingToneImportResult ?: return@registerForActivityResult
-            pendingToneImportResult = null
-
-            if (uri == null) {
-                callback.success(null)
-                return@registerForActivityResult
-            }
-
-            workerExecutor.execute {
-                try {
-                    val tone = toneLibraryManager.importTone(uri)
-                    mainHandler.post {
-                        callback.success(tone)
-                    }
-                } catch (error: ToneImportException) {
-                    mainHandler.post {
-                        callback.error("tone_import_error", error.message, null)
-                    }
-                } catch (error: Exception) {
-                    mainHandler.post {
-                        callback.error("tone_import_error", "Unable to import the selected tone.", null)
-                    }
-                }
-            }
-        }
+    private val permissionCommands = AlarmPermissionCommandHandler(
+        context = appContext,
+        activity = activity,
+        scheduler = scheduler,
+        ringSessionStore = ringSessionStore,
+    )
+    private val toneCommands = ToneCommandHandler(
+        context = appContext,
+        activity = activity,
+        workerExecutor = workerExecutor,
+        mainHandler = mainHandler,
+    )
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         try {
             when (call.method) {
-                "getStatus" -> result.success(
-                    mapOf(
-                        "canScheduleExactAlarms" to scheduler.canScheduleExactAlarms(),
-                        "notificationsEnabled" to NotificationManagerCompat.from(appContext)
-                            .areNotificationsEnabled(),
-                        "batteryOptimizationIgnored" to isIgnoringBatteryOptimizations(),
-                        "hasCamera" to packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
-                        "cameraPermissionGranted" to isPermissionGranted(Manifest.permission.CAMERA),
-                        "hasStepSensor" to hasStepSensor(),
-                        "activityRecognitionGranted" to isActivityRecognitionGranted(),
-                        "locationServicesEnabled" to isLocationServicesEnabled(),
-                        "foregroundLocationGranted" to isForegroundLocationGranted(),
-                        "backgroundLocationGranted" to isBackgroundLocationGranted(),
-                        "timezoneId" to ZoneId.systemDefault().id,
-                    ),
-                )
+                "getStatus" -> result.success(permissionCommands.statusMap())
 
-                "getStartupContext" -> result.success(
-                    mapOf(
-                        "userUnlocked" to isUserUnlocked(),
-                    ),
-                )
+                "getStartupContext" -> result.success(permissionCommands.startupContextMap())
 
                 "listAlarms" -> result.success(
                     store.getAll().map(::alarmToChannelMap),
@@ -128,7 +64,7 @@ class AlarmEngineMethodCallHandler(
                     val record = AlarmRecord.fromChannelMap(raw)
                     if (record.triggerKind == AlarmTriggerKind.LOCATION) {
                         runOnWorker(result) {
-                            val updated = locationAlarmCoordinator.sync(store.upsert(record))
+                            val updated = locationAlarmCoordinator.sync(store.upsert(record), force = true)
                             mainHandler.post {
                                 result.success(alarmToChannelMap(updated))
                             }
@@ -148,7 +84,7 @@ class AlarmEngineMethodCallHandler(
                     val updated = scheduler.updateEnabled(id, enabled)
                     if (updated.triggerKind == AlarmTriggerKind.LOCATION) {
                         runOnWorker(result) {
-                            val synced = locationAlarmCoordinator.sync(updated)
+                            val synced = locationAlarmCoordinator.sync(updated, force = true)
                             mainHandler.post {
                                 result.success(alarmToChannelMap(synced))
                             }
@@ -185,7 +121,7 @@ class AlarmEngineMethodCallHandler(
                         throw IllegalStateException("Refresh is only available for location alarms.")
                     }
                     runOnWorker(result) {
-                        val updated = locationAlarmCoordinator.sync(current)
+                        val updated = locationAlarmCoordinator.sync(current, force = true)
                         mainHandler.post {
                             result.success(alarmToChannelMap(updated))
                         }
@@ -211,18 +147,11 @@ class AlarmEngineMethodCallHandler(
                 }
 
                 "listCustomTones" -> {
-                    result.success(toneLibraryManager.listToneMaps())
+                    result.success(toneCommands.listToneMaps())
                 }
 
                 "importCustomTone" -> {
-                    if (toneImportLauncher == null) {
-                        throw IllegalStateException("Tone picker unavailable.")
-                    }
-                    if (pendingToneImportResult != null) {
-                        throw IllegalStateException("Tone import already in progress.")
-                    }
-                    pendingToneImportResult = result
-                    toneImportLauncher.launch(arrayOf("audio/mpeg", "audio/x-wav", "audio/wav"))
+                    toneCommands.importTone(result)
                 }
 
                 "deleteCustomTone" -> {
@@ -230,7 +159,7 @@ class AlarmEngineMethodCallHandler(
                         ?: throw IllegalArgumentException("Delete tone payload missing.")
                     val id = raw["id"] as? String
                         ?: throw IllegalArgumentException("Tone id missing.")
-                    val affectedAlarmIds = toneLibraryManager.deleteTone(id)
+                    val affectedAlarmIds = toneCommands.deleteTone(id)
                     result.success(affectedAlarmIds)
                 }
 
@@ -332,126 +261,37 @@ class AlarmEngineMethodCallHandler(
                 }
 
                 "requestExactAlarmPermission" -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                        !scheduler.canScheduleExactAlarms()
-                    ) {
-                        appContext.startActivity(
-                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                data = Uri.parse("package:${appContext.packageName}")
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            },
-                        )
-                    }
+                    permissionCommands.requestExactAlarmPermission()
                     result.success(null)
                 }
 
                 "requestNotificationPermission" -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        val granted = isPermissionGranted(Manifest.permission.POST_NOTIFICATIONS)
-
-                        if (!granted) {
-                            requestRuntimePermission(
-                                Manifest.permission.POST_NOTIFICATIONS,
-                                REQUEST_NOTIFICATIONS_CODE,
-                            )
-                        }
-                    } else {
-                        appContext.startActivity(
-                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                putExtra(Settings.EXTRA_APP_PACKAGE, appContext.packageName)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            },
-                        )
-                    }
+                    permissionCommands.requestNotificationPermission()
                     result.success(null)
                 }
 
                 "requestBatteryOptimizationExemption" -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                        !isIgnoringBatteryOptimizations()
-                    ) {
-                        appContext.startActivity(
-                            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                data = Uri.parse("package:${appContext.packageName}")
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            },
-                        )
-                    }
+                    permissionCommands.requestBatteryOptimizationExemption()
                     result.success(null)
                 }
 
                 "requestCameraPermission" -> {
-                    if (!packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
-                        result.success(null)
-                        return
-                    }
-
-                    if (!isPermissionGranted(Manifest.permission.CAMERA)) {
-                        requestRuntimePermissionOrOpenSettings(
-                            Manifest.permission.CAMERA,
-                            REQUEST_CAMERA_CODE,
-                            KEY_CAMERA_REQUESTED,
-                        )
-                    }
+                    permissionCommands.requestCameraPermission()
                     result.success(null)
                 }
 
                 "requestActivityRecognitionPermission" -> {
-                    if (!hasStepSensor()) {
-                        result.success(null)
-                        return
-                    }
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                        !isPermissionGranted(Manifest.permission.ACTIVITY_RECOGNITION)
-                    ) {
-                        requestRuntimePermissionOrOpenSettings(
-                            Manifest.permission.ACTIVITY_RECOGNITION,
-                            REQUEST_ACTIVITY_RECOGNITION_CODE,
-                            KEY_ACTIVITY_RECOGNITION_REQUESTED,
-                        )
-                    }
-                    if (activeSession()?.mission?.spec?.type == MissionSpec.TYPE_STEPS) {
-                        StepMissionTracker.ensureRunning(appContext, activeSession())
-                    }
+                    permissionCommands.requestActivityRecognitionPermission()
                     result.success(null)
                 }
 
                 "requestForegroundLocationPermission" -> {
-                    if (!isForegroundLocationGranted()) {
-                        requestRuntimePermissionOrOpenSettings(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            REQUEST_FOREGROUND_LOCATION_CODE,
-                            KEY_FOREGROUND_LOCATION_REQUESTED,
-                        )
-                    }
+                    permissionCommands.requestForegroundLocationPermission()
                     result.success(null)
                 }
 
                 "requestBackgroundLocationPermission" -> {
-                    if (!isForegroundLocationGranted()) {
-                        requestRuntimePermissionOrOpenSettings(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            REQUEST_FOREGROUND_LOCATION_CODE,
-                            KEY_FOREGROUND_LOCATION_REQUESTED,
-                        )
-                        result.success(null)
-                        return
-                    }
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                        !isBackgroundLocationGranted()
-                    ) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            openAppDetailsSettings()
-                        } else {
-                            requestRuntimePermissionOrOpenSettings(
-                                Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-                                REQUEST_BACKGROUND_LOCATION_CODE,
-                                KEY_BACKGROUND_LOCATION_REQUESTED,
-                            )
-                        }
-                    }
+                    permissionCommands.requestBackgroundLocationPermission()
                     result.success(null)
                 }
 
@@ -477,11 +317,7 @@ class AlarmEngineMethodCallHandler(
                 }
 
                 "openLocationSettings" -> {
-                    appContext.startActivity(
-                        Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        },
-                    )
+                    permissionCommands.openLocationSettings()
                     result.success(null)
                 }
 
@@ -494,123 +330,17 @@ class AlarmEngineMethodCallHandler(
         }
     }
 
-    private fun hasStepSensor(): Boolean {
-        return sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR) != null
-    }
-
     private fun activeSession(): AlarmRingSession? {
         return ringSessionStore.get()?.takeIf(AlarmRingSession::isActive)
     }
 
     private fun alarmToChannelMap(record: AlarmRecord): Map<String, Any?> {
-        val customTone = record.customToneId?.let(toneLibraryStore::get)
-        val customToneHealthy = if (record.ringtoneId == "custom_tone") {
-            customTone?.let(toneLibraryManager::isHealthy) ?: false
-        } else {
-            true
-        }
-        val customToneName = if (record.ringtoneId == "custom_tone") {
-            customTone?.displayName ?: "Missing custom tone"
-        } else {
-            null
-        }
-
-        return record.toChannelMap() + mapOf(
-            "customToneId" to record.customToneId,
-            "customToneName" to customToneName,
-            "customToneHealthy" to customToneHealthy,
-        )
+        return record.toChannelMap() + toneCommands.channelFieldsFor(record)
     }
 
-    private fun isActivityRecognitionGranted(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            isPermissionGranted(Manifest.permission.ACTIVITY_RECOGNITION)
-        } else {
-            true
-        }
-    }
-
-    private fun isForegroundLocationGranted(): Boolean {
-        return isPermissionGranted(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
-
-    private fun isBackgroundLocationGranted(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            isPermissionGranted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-        } else {
-            isForegroundLocationGranted()
-        }
-    }
-
-    private fun isLocationServicesEnabled(): Boolean {
-        return locationManager?.isLocationEnabled ?: false
-    }
-
-    private fun isPermissionGranted(permission: String): Boolean {
-        return ContextCompat.checkSelfPermission(
-            appContext,
-            permission,
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun isIgnoringBatteryOptimizations(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            powerManager.isIgnoringBatteryOptimizations(appContext.packageName)
-        } else {
-            true
-        }
-    }
-
-    private fun isUserUnlocked(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            userManager?.isUserUnlocked ?: true
-        } else {
-            true
-        }
-    }
-
-    private fun requestRuntimePermission(permission: String, requestCode: Int) {
-        val hostActivity = activity
-            ?: throw IllegalStateException("Activity unavailable for permission request.")
-
-        ActivityCompat.requestPermissions(
-            hostActivity,
-            arrayOf(permission),
-            requestCode,
-        )
-    }
-
-    private fun requestRuntimePermissionOrOpenSettings(
-        permission: String,
-        requestCode: Int,
-        preferenceKey: String,
-    ) {
-        val hostActivity = activity
-        if (hostActivity == null) {
-            openAppDetailsSettings()
-            return
-        }
-
-        val wasRequestedBefore = permissionPreferences.getBoolean(preferenceKey, false)
-        val shouldRequestInApp = !wasRequestedBefore ||
-            ActivityCompat.shouldShowRequestPermissionRationale(hostActivity, permission)
-
-        if (shouldRequestInApp) {
-            permissionPreferences.edit().putBoolean(preferenceKey, true).apply()
-            requestRuntimePermission(permission, requestCode)
-            return
-        }
-
-        openAppDetailsSettings()
-    }
-
-    private fun openAppDetailsSettings() {
-        appContext.startActivity(
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.parse("package:${appContext.packageName}")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-        )
+    fun dispose() {
+        toneCommands.dispose()
+        workerExecutor.shutdownNow()
     }
 
     private fun runOnWorker(
@@ -630,19 +360,6 @@ class AlarmEngineMethodCallHandler(
                 }
             }
         }
-    }
-
-    companion object {
-        private const val KEY_ACTIVITY_RECOGNITION_REQUESTED = "activity_recognition_requested"
-        private const val KEY_BACKGROUND_LOCATION_REQUESTED = "background_location_requested"
-        private const val KEY_CAMERA_REQUESTED = "camera_requested"
-        private const val KEY_FOREGROUND_LOCATION_REQUESTED = "foreground_location_requested"
-        private const val PERMISSION_PREFS_NAME = "alarm_engine_permission_prompts"
-        private const val REQUEST_ACTIVITY_RECOGNITION_CODE = 1003
-        private const val REQUEST_BACKGROUND_LOCATION_CODE = 1005
-        private const val REQUEST_CAMERA_CODE = 1002
-        private const val REQUEST_FOREGROUND_LOCATION_CODE = 1004
-        private const val REQUEST_NOTIFICATIONS_CODE = 1001
     }
 }
 

@@ -44,11 +44,12 @@ class ToneLibraryManager(
         val importedFile = store.resolveFile(importedFileName)
 
         val toneRecord = try {
-            copyIntoManagedStorage(
+            val copiedSizeBytes = copyIntoManagedStorage(
                 contentResolver = contentResolver,
                 uri = uri,
                 destinationPath = importedFile.absolutePath,
             )
+            tryReleasePersistablePermission(uri)
 
             ToneRecord(
                 id = toneId,
@@ -57,7 +58,7 @@ class ToneLibraryManager(
                 localFileName = importedFileName,
                 sourceUri = null,
                 mimeType = mimeType,
-                sizeBytes = metadata.sizeBytes,
+                sizeBytes = copiedSizeBytes,
                 warning = null,
                 createdAtEpochMillis = System.currentTimeMillis(),
             )
@@ -80,7 +81,10 @@ class ToneLibraryManager(
     }
 
     fun deleteTone(id: String): List<String> {
-        store.delete(id) ?: return emptyList()
+        val deleted = store.delete(id) ?: return emptyList()
+        deleted.sourceUri?.let { sourceUri ->
+            tryReleasePersistablePermission(Uri.parse(sourceUri))
+        }
         return AlarmStore(context).getAll()
             .filter { it.customToneId == id }
             .map(AlarmRecord::id)
@@ -131,20 +135,48 @@ class ToneLibraryManager(
         contentResolver: ContentResolver,
         uri: Uri,
         destinationPath: String,
-    ) {
+    ): Long {
         val destinationFile = File(destinationPath)
+        val temporaryFile = File("${destinationFile.absolutePath}.tmp")
         try {
+            temporaryFile.delete()
             contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(destinationFile).use { output ->
-                    input.copyTo(output)
+                FileOutputStream(temporaryFile).use { output ->
+                    copyWithSizeLimit(input, output)
                 }
             } ?: throw IOException("Unable to open selected tone.")
+
+            if (!temporaryFile.renameTo(destinationFile)) {
+                throw IOException("Unable to finalize selected tone copy.")
+            }
+            return destinationFile.length()
         } catch (error: IOException) {
+            temporaryFile.delete()
             destinationFile.delete()
             throw error
         } catch (error: RuntimeException) {
+            temporaryFile.delete()
             destinationFile.delete()
             throw error
+        }
+    }
+
+    private fun copyWithSizeLimit(
+        input: java.io.InputStream,
+        output: FileOutputStream,
+    ): Long {
+        var totalBytes = 0L
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = input.read(buffer)
+            if (read == -1) {
+                return totalBytes
+            }
+            totalBytes += read
+            if (totalBytes > MAX_IMPORT_BYTES) {
+                throw ToneImportException("File too large. Please select a tone under 15 MB.")
+            }
+            output.write(buffer, 0, read)
         }
     }
 
@@ -179,6 +211,18 @@ class ToneLibraryManager(
             )
         } catch (_: SecurityException) {
         } catch (_: UnsupportedOperationException) {
+        }
+    }
+
+    private fun tryReleasePersistablePermission(uri: Uri) {
+        try {
+            context.contentResolver.releasePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        } catch (_: SecurityException) {
+        } catch (_: UnsupportedOperationException) {
+        } catch (_: IllegalArgumentException) {
         }
     }
 

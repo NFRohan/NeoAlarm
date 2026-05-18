@@ -78,7 +78,7 @@ class AlarmRingingService : Service() {
     }
 
     override fun onDestroy() {
-        playbackController.stop()
+        stopRingingFeedback()
         super.onDestroy()
     }
 

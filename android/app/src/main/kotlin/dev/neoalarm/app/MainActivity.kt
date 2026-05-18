@@ -18,6 +18,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterFragmentActivity() {
     private lateinit var visionSessionManager: VisionSessionManager
     private lateinit var activeSessionStreamHandler: ActiveSessionStreamHandler
+    private var alarmEngineMethodCallHandler: AlarmEngineMethodCallHandler? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +37,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onDestroy() {
+        alarmEngineMethodCallHandler?.dispose()
+        alarmEngineMethodCallHandler = null
         if (::visionSessionManager.isInitialized) {
             visionSessionManager.dispose()
         }
@@ -51,15 +54,15 @@ class MainActivity : FlutterFragmentActivity() {
         )
         activeSessionStreamHandler = ActiveSessionStreamHandler(applicationContext)
 
+        alarmEngineMethodCallHandler = AlarmEngineMethodCallHandler(
+            context = applicationContext,
+            activity = this,
+        )
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "dev.neoalarm.app.alarm_engine",
-        ).setMethodCallHandler(
-            AlarmEngineMethodCallHandler(
-                context = applicationContext,
-                activity = this,
-            ),
-        )
+        ).setMethodCallHandler(alarmEngineMethodCallHandler)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

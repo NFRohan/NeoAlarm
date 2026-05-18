@@ -135,12 +135,16 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
             focusNode: _answerFocusNode,
             autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(signed: true),
+            textInputAction: TextInputAction.done,
             decoration: const InputDecoration(hintText: 'Type the answer'),
             onChanged: (_) {
               widget.registerActivity();
             },
             onTap: () {
               widget.registerActivity();
+            },
+            onTapOutside: (_) {
+              _restoreInputFocus(immediate: true);
             },
             onSubmitted: (_) => _submit(),
           ),
@@ -176,6 +180,7 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
       _submitting = true;
       _feedbackText = null;
     });
+    _restoreInputFocus(immediate: true);
 
     await widget.registerActivity();
     final result = await widget.submitMathAnswer(_answerController.text);
@@ -204,16 +209,24 @@ class _MathMissionRunnerState extends State<MathMissionRunner> {
     });
 
     if (result != MathAnswerSubmissionResult.completed) {
-      _restoreInputFocus();
+      _restoreInputFocus(immediate: true);
     }
   }
 
-  void _restoreInputFocus() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
+  void _restoreInputFocus({bool immediate = false}) {
+    void requestFocus() {
+      if (!mounted || !_answerFocusNode.canRequestFocus) {
         return;
       }
       _answerFocusNode.requestFocus();
+    }
+
+    if (immediate) {
+      requestFocus();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      requestFocus();
     });
   }
 }

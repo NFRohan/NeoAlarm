@@ -41,7 +41,9 @@ For the MVP:
 
 - geofence transition type: `ENTER`
 - alarm type: one-shot
-- radius presets: `Near (500 m)`, `City (1000 m)`, `Transit (1500 m)`
+- explicit radius presets: `500 m`, `1000 m`, `1500 m`
+
+The UI should explain the distance tradeoff in plain language instead of hiding it behind semantic labels such as `Near`, `City`, or `Transit`.
 
 If a user is already inside the geofence at arm time, the setup flow must detect that and warn instead of assuming an `ENTER` transition will fire later.
 
@@ -63,10 +65,12 @@ Each location alarm will derive an explicit health state.
 Initial states:
 
 - `HEALTHY`
+- `REARM_PENDING`
 - `NO_FOREGROUND_PERMISSION`
 - `NO_BACKGROUND_PERMISSION`
 - `LOCATION_DISABLED`
 - `GEOFENCE_NOT_REGISTERED`
+- `WAITING_FOR_EXIT`
 - `PLAY_SERVICES_UNAVAILABLE`
 - `BATTERY_RESTRICTED`
 - `LOW_LOCATION_CONFIDENCE`
@@ -123,8 +127,8 @@ The MVP will support both:
 
 Provider choice for MVP:
 
-- map rendering: OpenStreetMap tiles via `flutter_map`
-- place search/geocoding: a provider abstraction with Nominatim as the first implementation
+- map rendering: `LocationAlarmMap` as a dedicated renderer seam, currently backed by MapLibre + OpenFreeMap Liberty
+- place search/geocoding: a provider abstraction with Photon for search and optional OpenCage reverse geocoding for dropped pins
 
 This decision is based on:
 
@@ -156,7 +160,7 @@ It should not depend on provider-specific place IDs for correctness.
 ### Negative
 
 - background location permission flow is still complex
-- public Nominatim quality and usage constraints may limit the MVP
+- provider quality and map usability can still evolve behind the abstraction if Photon or the current map surface become limiting
 - approximate location and OEM behavior still create unavoidable real-world fuzziness
 - this feature will need more field validation than normal alarm features
 

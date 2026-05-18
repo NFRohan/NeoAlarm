@@ -4,6 +4,12 @@
 
 This document defines the product and engineering direction after the `v1.0.x` stabilization line.
 
+Status note:
+
+- the original daily-usability recommendation has been executed
+- skip-next, gradual volume ramp, first-alarm empty-state improvements, custom tones, timezone-specific alarms, extra loud mode, and the location-alarm MVP are now part of the current working tree
+- the current immediate priority is the post-audit reliability, security, and quality hardening sprint
+
 NeoAlarm now has a trustworthy base:
 
 - exact alarm scheduling is live
@@ -44,8 +50,8 @@ The best expansion features should make the app better for both end users and fu
 Examples:
 
 - backup/export helps users keep their setup and helps contributors reason about serialized state
-- gradual volume ramp improves UX without adding a new mission surface
-- skip-next makes recurring alarms more usable without changing the scheduling model
+- gradual volume ramp improved UX without adding a new mission surface and is now implemented
+- skip-next made recurring alarms more usable without changing the scheduling model and is now implemented
 
 ## Priority Buckets
 
@@ -55,10 +61,10 @@ These are the most valuable near-term features because they improve the app ever
 
 ### Candidate Features
 
-- skip next occurrence for repeating alarms
-- gradual volume ramp
-- richer ringtone options
-- better empty-state and first-alarm education after onboarding
+- skip next occurrence for repeating alarms, delivered
+- gradual volume ramp, delivered
+- richer ringtone options, delivered through custom tone import and selection
+- better empty-state and first-alarm education after onboarding, delivered
 
 ### Why This Bucket Comes First
 
@@ -73,7 +79,7 @@ These are the most valuable near-term features because they improve the app ever
 - gradual volume ramp
 - better empty state and first-alarm guidance after onboarding
 
-That would produce a strong practical release without changing the mission platform.
+This slice has been completed and produced a practical release without changing the mission platform.
 
 ## Bucket 2: Power-User Reliability Features
 
@@ -85,7 +91,7 @@ These features deepen trust and control for people who rely on the app heavily.
 - restore/import
 - alarm history
 - holiday/date skip rules
-- timezone/travel handling refinements
+- timezone/travel handling refinements beyond the current specific-timezone mode
 - richer OEM guidance and recovery help
 - advanced diagnostics surface for alarm health and recent failures
 
@@ -98,9 +104,9 @@ The core alarm engine is now good enough that users will start expecting continu
 1. backup/export
 2. restore/import
 3. alarm history
-4. timezone/travel handling
-Time-zone-aware time alarms are now partially implemented through a `Device time` vs `Specific timezone` model. Future work in this bucket should focus on travel UX polish, clearer summaries, and deeper DST/timezone validation rather than inventing the basic model from scratch.
-5. holiday/date skip rules
+4. holiday/date skip rules
+
+Time-zone-aware time alarms are now implemented through a `Device time` vs `Specific timezone` model. Future work in this bucket should focus on travel UX polish, clearer summaries, and deeper DST/timezone validation rather than inventing the basic model from scratch.
 
 Backup and restore should come before more scheduling complexity, because they make experimentation safer for both users and maintainers.
 
@@ -172,11 +178,13 @@ Goal:
 
 Make the app more practical for everyday use without changing the core architecture.
 
+Status: Completed
+
 Scope:
 
-- skip next occurrence
-- gradual volume ramp
-- better empty-state and first-alarm guidance after onboarding
+- skip next occurrence, delivered
+- gradual volume ramp, delivered
+- better empty-state and first-alarm guidance after onboarding, delivered
 
 Success criteria:
 
@@ -241,20 +249,20 @@ Success criteria:
 
 ## Suggested Next Sprint
 
-The best next sprint is:
+The original recommended usability sprint is complete. The best next sprint is now:
 
-- skip next occurrence
-- gradual volume ramp
-- better empty state and first-alarm guidance after onboarding
+- reliability, security, and quality hardening from `reliability-security-quality-hardening-sprint.md`
+- location-alarm route validation
+- native release-lint readiness
+- geofence cleanup and retry confidence
 
 Why this is the best next move:
 
-- it improves the app for every user, every day
-- it uses the existing alarm and session architecture
-- it avoids reopening high-risk permission and sensor work immediately after stabilization
-- it creates a cleaner product baseline before the next mission sprint
+- it protects the reliability model before more feature expansion
+- it addresses concrete audit findings instead of inventing new surface area
+- it keeps location alarms from shipping as a trust-sensitive feature with unresolved native hardening gaps
 
-Implementation guidance for this sprint:
+Historical implementation guidance for the completed usability sprint:
 
 - `skip next occurrence` should be represented as a concrete skipped local occurrence date in the alarm's own timezone, not as a boolean flag
 - `gradual volume ramp` should move playback from `Ringtone` to `MediaPlayer`, expose a per-alarm ramp toggle that defaults to `off`, use per-instance ramping when enabled, and apply a carefully restored temporary minimum-volume floor only when system volume is too low to be audible

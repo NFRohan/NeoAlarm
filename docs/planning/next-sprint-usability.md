@@ -1,5 +1,9 @@
 # Next Sprint: Everyday Usability
 
+Status: Completed
+
+This document is retained as the historical plan for the usability sprint that delivered skip-next, gradual volume ramp, and better first-alarm empty-state guidance. Current active planning has moved to `reliability-security-quality-hardening-sprint.md`.
+
 ## Goal
 
 Make NeoAlarm more practical for daily use without changing the core engine or expanding the mission platform.

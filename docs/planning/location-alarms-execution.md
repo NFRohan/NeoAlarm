@@ -21,8 +21,8 @@ Delivered:
 - location capability fields in engine status
 - native permission/settings hooks for foreground/background location
 - provider abstraction for location search
-- first Nominatim-backed repository implementation
-- provider abstraction is in place so search can move to a BYOK provider later without touching the alarm core
+- first concrete search repository implementation
+- provider abstraction is in place so search can change without touching the alarm core
 
 Validation:
 
@@ -33,8 +33,8 @@ Validation:
 Notes:
 
 - the provider abstraction is the important architectural win here
-- Nominatim is the first implementation, not a core dependency of the alarm model
-- the next refinement pass should upgrade search quality behind the same abstraction rather than rewriting the map flow
+- the first implementation stayed isolated from the alarm model so it could be swapped later without churn
+- the next refinement pass should keep improving search quality and map usability behind the same boundaries rather than bleeding provider details into the alarm core
 
 ## Slice 2: Flutter Setup Flow
 
@@ -45,7 +45,7 @@ Target:
 - search-first destination setup
 - map confirmation with pin adjustment
 - explicit distance presets with helper guidance
-- no geofence arming yet
+- no geofence arming in this slice
 
 Deliverables:
 
@@ -60,7 +60,6 @@ Delivered:
 - `LocationAlarmSetupController` and immutable setup state
 - `LocationAlarmSetupScreen` that returns a normalized location-trigger draft
 - `LocationAlarmMap` as the dedicated map-rendering boundary
-- `flutter_map` + OpenStreetMap tile rendering with `latlong2`
 - a current-location recenter control that uses native fused-location lookup to jump and zoom the map without tying the setup flow to a specific map provider
 - unit coverage for setup-controller search, pin-drop, and edit seeding
 
@@ -74,13 +73,12 @@ Validation:
 
 Notes:
 
-- the setup flow exists but is intentionally not exposed from the dashboard yet
-- this keeps users away from a half-armed location alarm until native geofence arming is ready
-- future refinement should improve copy and search quality without replacing the whole flow
+- the setup flow initially stayed unexposed until native geofence arming landed
+- search and map quality are intentionally isolated behind provider and renderer seams
 
 ## Slice 3: Native Geofence Registration
 
-Status: In progress
+Status: Completed for MVP, with hardening tracked separately
 
 Target:
 
@@ -115,12 +113,10 @@ Delivered so far:
 - native location records now persist an approach state so outer-zone tracking survives store round-trips
 - inner and outer geofences now arm together, and outer-zone entry/exit drives passive fused-location listener registration and cleanup
 - passive location updates can now trigger arrival when they show the device crossing into the inner radius before the inner geofence callback arrives
+- transient location-arm failures now persist retry metadata and schedule deferred re-arm through a native retry broadcast
+- `refreshLocationAlarm` now forces an immediate retry, while routine background sync respects the persisted retry window
 
-Still pending inside this slice:
-
-- retry/deferred re-registration strategy after boot / Play services unavailability
-- fuller repair actions around location health states in editor/detail surfaces
-- current real-device validation of geofence registration and trigger behavior
+Remaining hardening is tracked in `reliability-security-quality-hardening-sprint.md`, especially bounded Play Services waits, geofence error visibility, cleanup after trigger, and release-lint readiness.
 
 Validation:
 
@@ -133,7 +129,7 @@ Validation:
 
 ## Slice 4: End-To-End Alarm Arming
 
-Status: In progress
+Status: Completed for MVP, with hardening tracked separately
 
 Target:
 
@@ -159,9 +155,9 @@ Delivered so far:
 
 Current limitation:
 
-- the first exposed location-alarm flow saves with the existing default tone and mission settings
-- a full location-specific editor for tone and mission customization is still deferred until the trigger path is validated
-- existing saved alarms still rely on edit-and-resave to re-arm after the user fixes missing location access, though the setup flow no longer tries to own that repair path
+- first-time location alarm creation saves immediately after destination setup using default tone and mission settings
+- saved location alarms can then be edited for destination, radius, ringtone, volume behavior, snooze policy, and mission configuration
+- device-level readiness and global repair actions intentionally live in Settings instead of the destination setup flow
 
 Validation:
 
@@ -171,7 +167,7 @@ Validation:
 
 ## Slice 5: Reliability Hardening
 
-Status: Pending
+Status: Implemented for MVP, with release hardening still pending
 
 Target:
 
@@ -179,7 +175,7 @@ Target:
 - reboot/locked-boot behavior review
 - OEM and poor-signal guidance
 
-Deliverables:
+Delivered:
 
 - passive foreground/unlock fallback check
 - outer-zone passive fused-location listener with cleanup after trigger or exit
@@ -193,10 +189,50 @@ Validation:
 - underground behavior expectations
 - reboot tests
 
+## Slice 6: Search Stack Replacement
+
+Status: Completed
+
+Delivered:
+
+- Photon location search implementation behind the existing repository abstraction
+- parser coverage for Photon response parsing
+- search result selection now closes the results list immediately
+- no search-provider switcher in the product UI
+
+Validation:
+
+- `flutter analyze`
+- `flutter test`
+- `flutter build apk --release`
+
+## Slice 7: MapLibre Map Surface Upgrade
+
+Status: Completed
+
+Deliverables:
+
+- single MapLibre renderer path
+- OpenFreeMap Liberty style
+- optional OpenCage reverse geocoding for dropped-pin labels
+- preserved destination selection and recenter behavior
+- removal of the bugged renderer switching logic
+
+Explicitly deferred:
+
+- offline region downloads
+- deeper map polish beyond the base migration
+
+Validation:
+
+- destination selection behavior is stable
+- map gestures work normally
+- map choice does not affect alarm arming/trigger semantics
+
 ## Current Implementation Notes
 
 - Slice 1 is complete and green
 - Slice 2 is complete and green
-- Slice 3 has real native scaffolding but is not feature-complete yet
+- Slice 3 is functionally present for MVP but needs the post-audit native hardening pass
 - setup-time validation still catches already-inside-radius cases, but device-level readiness is now intentionally surfaced outside setup
-- location alarms are now exposed for real-device validation, but they are still intentionally MVP-scoped while the native retry/re-registration work finishes
+- location alarms are now exposed for real-device validation, but they are still intentionally MVP-scoped while reliability, security, and lint hardening finish

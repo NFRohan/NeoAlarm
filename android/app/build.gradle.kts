@@ -35,6 +35,12 @@ android {
         versionName = flutter.versionName
     }
 
+    lint {
+        // Flutter regenerates ignored android/local.properties with raw Windows
+        // paths, so PropertyEscape would make lintRelease machine-local.
+        disable += "PropertyEscape"
+    }
+
     signingConfigs {
         if (signingPropertiesFile.exists()) {
             create("release") {

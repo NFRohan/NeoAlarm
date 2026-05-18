@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
@@ -113,6 +114,7 @@ class VisionSessionManager(
         eventSink = null
     }
 
+    @androidx.annotation.OptIn(ExperimentalGetImage::class)
     private fun bindIfPossible() {
         if (disposed) {
             return
@@ -210,6 +212,7 @@ class VisionSessionManager(
         )
     }
 
+    @androidx.annotation.OptIn(ExperimentalGetImage::class)
     private fun analyzeImage(imageProxy: ImageProxy) {
         if (!isProcessingFrame.compareAndSet(false, true)) {
             imageProxy.close()

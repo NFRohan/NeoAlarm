@@ -60,6 +60,27 @@ jobs:
           echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Check out release tag
+        id: release_ref
+        shell: bash
+        run: |
+          tag_name="${{ steps.release_meta.outputs.tag_name }}"
+          git fetch --force origin "refs/tags/${tag_name}:refs/tags/${tag_name}"
+          tag_commit="$(git rev-list -n 1 "$tag_name")"
+          if [ -z "$tag_commit" ]; then
+            echo "Unable to resolve release tag: $tag_name" >&2
+            exit 1
+          fi
+
+          git checkout --force "$tag_name"
+          checked_out_commit="$(git rev-parse HEAD)"
+          if [ "$checked_out_commit" != "$tag_commit" ]; then
+            echo "Checked out $checked_out_commit but $tag_name resolves to $tag_commit" >&2
+            exit 1
+          fi
+
+          echo "commit_sha=$checked_out_commit" >> "$GITHUB_OUTPUT"
+
       - name: Set up Java
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
         with:
@@ -130,6 +151,9 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
+      - name: Build split release APKs
+        run: flutter build apk --release --split-per-abi
+
       - name: Build release app bundle
         run: flutter build appbundle --release
 
@@ -141,6 +165,9 @@ jobs:
           mkdir -p dist
 
           cp build/app/outputs/flutter-apk/app-release.apk "dist/neoalarm-${version}-release.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/neoalarm-${version}-arm64-v8a-release.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "dist/neoalarm-${version}-armeabi-v7a-release.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "dist/neoalarm-${version}-x86_64-release.apk"
           cp build/app/outputs/bundle/release/app-release.aab "dist/neoalarm-${version}-release.aab"
 
           if [ -f build/app/outputs/mapping/release/mapping.txt ]; then
@@ -152,7 +179,7 @@ jobs:
           cat > "dist/neoalarm-${version}-build-info.txt" <<EOF
           tag=${{ steps.release_meta.outputs.tag_name }}
           version=${version}
-          commit=${GITHUB_SHA}
+          commit=${{ steps.release_ref.outputs.commit_sha }}
           run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           built_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           EOF
@@ -172,6 +199,8 @@ jobs:
         shell: bash
         run: |
           release_flags=()
+          notes_flags=()
+          notes_file="docs/releases/${TAG_NAME}.md"
 
           if [ "$DRAFT" = "true" ]; then
             release_flags+=(--draft)
@@ -181,10 +210,19 @@ jobs:
             release_flags+=(--prerelease)
           fi
 
+          if [ -f "$notes_file" ]; then
+            notes_flags+=(--notes-file "$notes_file")
+          else
+            notes_flags+=(--generate-notes)
+          fi
+
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            if [ -f "$notes_file" ]; then
+              gh release edit "$TAG_NAME" --notes-file "$notes_file"
+            fi
             gh release upload "$TAG_NAME" dist/* --clobber
           else
-            gh release create "$TAG_NAME" dist/* --generate-notes --target "$GITHUB_SHA" "${release_flags[@]}"
+            gh release create "$TAG_NAME" dist/* "${notes_flags[@]}" --target "${{ steps.release_ref.outputs.commit_sha }}" "${release_flags[@]}"
           fi
 
       - name: Write workflow summary
@@ -195,9 +233,10 @@ jobs:
 
           - Tag: \`${{ steps.release_meta.outputs.tag_name }}\`
           - Version: \`${{ steps.release_meta.outputs.version }}\`
-          - Commit: \`${GITHUB_SHA}\`
+          - Commit: \`${{ steps.release_ref.outputs.commit_sha }}\`
           - Assets:
-            - signed APK
+            - signed universal APK
+            - signed ABI split APKs
             - signed app bundle
             - checksum manifest
             - build metadata

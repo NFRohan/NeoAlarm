@@ -8,7 +8,7 @@ This sprint is about three things:
 
 - making health and repair states visible and actionable
 - hardening trigger confidence around geofence registration and recovery
-- improving setup, editing, and search quality without rewriting the map stack
+- improving setup, editing, and search quality while finishing the move onto the new MapLibre-based stack
 
 ## Product Direction
 
@@ -66,21 +66,20 @@ Users should be able to recover a broken location alarm from:
 - the saved alarm card
 - the editor / detail surface
 
-### Search Provider Direction
+### Search And Map Direction
 
-Keep map rendering unchanged for this sprint:
+Use the new concrete stack:
 
-- `flutter_map`
-- OpenStreetMap tiles
+- `MapLibre`
+- `OpenFreeMap Liberty`
+- `Photon` search
+- optional `OpenCage` reverse geocoding for pin drops
 
-Improve search quality separately:
+Keep the abstraction boundaries:
 
-- preserve `LocationSearchRepository` as the abstraction boundary
-- add BYOK search-provider support
-- implement Mapbox geocoding as the first upgraded provider
-- keep Nominatim as the zero-config fallback
-
-This gives the biggest practical UX win with much less churn than a full Google Maps or Mapbox map migration.
+- `LocationSearchRepository` for place search
+- a dedicated reverse-geocode repository for dropped-pin labels
+- `LocationAlarmMap` as the renderer seam
 
 ## Sprint Goals
 
@@ -128,6 +127,9 @@ Delivered so far:
 - native location records now persist an approach state for outer-zone tracking
 - outer approach geofences and a global passive fused-location listener are now wired as a hybrid arrival assist
 - passive listener cleanup now happens when alarms trigger, disable, delete, or leave the outer approach zone
+- location alarms now persist deferred re-arm retry metadata for transient native failures
+- Play services startup or transient geofence failures now move alarms into a `Re-arm pending` state instead of silently staying unarmed
+- deferred retry scheduling now uses a native backoff alarm, while manual refresh actions still force an immediate re-arm attempt
 
 Settled direction:
 
@@ -173,73 +175,110 @@ Recommended warning copy direction:
 
 - `Location alarms require GPS or network location and may be late or fail underground.`
 
-### 5. Better Search Quality Through BYOK
+### 5. Better Search Quality And Pin Labels
 
-Search quality is the weakest part of the MVP for Bangladesh and similar regions.
+Search quality and map usability were the weakest part of the earlier MVP.
 
 Deliverables:
 
-- configurable BYOK provider path for location search
-- Mapbox geocoding implementation behind the repository abstraction
-- graceful fallback to Nominatim when no key is configured
-- no map-renderer migration in this sprint
+- Photon search behind the existing repository abstraction
+- OpenCage reverse geocoding for dropped-pin labels
+- no provider switcher in the product UI
+- OpenCage key stored in-app as an optional enhancement only
+
+### 6. Map Surface Upgrade
+
+Location alarms now use a single renderer path:
+
+- MapLibre map rendering
+- OpenFreeMap Liberty style
+- preserved native trigger-engine boundary
+- no dynamic renderer switching
 
 ## Non-Goals
 
 Do not include these in this sprint:
 
 - full Google Maps SDK migration
-- full Mapbox map migration
 - route awareness or transit-stop intelligence
 - repeating location alarms
 - semantic radius labels as the primary UX
 - analytics/history for location alarms
 - large visual redesign of the map surface
+- changing alarm trigger semantics as part of map migration
 
 ## Execution Order
 
 ### Phase 1: Health And Repair
 
-Status: In progress
+Status: Implemented for MVP, with hardening follow-up
 
 Delivered so far:
 
 - shared location-health repair labels in the domain model
 - dashboard repair actions for saved location alarms
 - saved location alarms can now request permission repair, open location settings, retry geofence arming, and route battery-restriction recovery from the dashboard
+- saved location alarms can retry unarmed geofences from the editor when the issue is alarm-specific
 - app-resume reevaluation now refreshes saved location-alarm health instead of leaving stale status on cards
 - device-level location readiness now lives in Settings instead of the destination setup flow
 
-- refine health model split
-- add dashboard/editor repair actions
-- add periodic reevaluation on resume / permission return
+Remaining hardening:
+
+- fail closed on unknown native/Dart health IDs
+- improve geofence delivery and removal error visibility
+- reduce duplicate resume-triggered refresh work
 
 ### Phase 2: Trigger Confidence
 
-- implement deferred/retry re-registration
-- tighten boot/re-arm flow
-- improve already-inside and duplicate-trigger handling
-- add the hybrid geofence plus passive-listener approach-state machine
+Status: Implemented for MVP, with release hardening follow-up
+
+Delivered:
+
+- deferred/retry re-registration metadata
+- already-inside and duplicate-trigger handling
+- hybrid geofence plus passive-listener approach-state machine
+- passive foreground fallback checks
+
+Remaining hardening:
+
+- isolate boot/re-arm failure domains
+- bound Play Services waits
+- ensure trigger/disable/delete cleanup removes native geofences and passive listeners
 
 ### Phase 3: Editing Improvements
 
-- expose destination/radius updates cleanly
-- add repair entry points
+Status: Implemented for MVP
+
+Delivered:
+
+- destination/radius updates through the setup flow
+- location-specific editor header
+- tone, volume, snooze, and mission editing for saved location alarms
+- alarm-specific retry entry point for unarmed geofences
 
 ### Phase 4: Setup Copy And Map Polish
 
-- add a current-location recenter control so users can jump the map to their live position without panning across the world
-- keep the search field focused on real queries instead of generic seeded labels like `Pinned location`
-- replace the large stacked search action with a compact inline search icon button
-- replace remaining ambiguous copy
-- add underground/no-signal warning
-- polish selection helpers
+Status: Implemented for MVP
 
-### Phase 5: BYOK Search Upgrade
+Delivered:
 
-- keep current map renderer
-- add Mapbox geocoding provider
-- preserve Nominatim fallback
+- current-location recenter control
+- search field no longer seeds generic labels like `Pinned location`
+- compact inline search icon button
+- search results close immediately after selection
+- underground/no-signal warning copy
+- explicit distance helper copy
+
+### Phase 5: Search And Renderer Replacement
+
+Status: Implemented for MVP
+
+Delivered:
+
+- Photon search
+- MapLibre + OpenFreeMap Liberty map rendering
+- optional OpenCage reverse geocoding for dropped pins
+- removal of old provider-specific implementation paths
 
 ## Acceptance Criteria
 
@@ -250,7 +289,10 @@ We can call this sprint successful when:
 - a reboot or transient Play services failure does not silently leave armed alarms permanently unregistered
 - saved location alarms are easy to edit without restarting the entire setup flow
 - setup guidance uses explicit distances and honest warning copy
-- Mapbox-backed search works when configured, while Nominatim still works as fallback
+- Photon search returns useful Bangladesh queries more reliably than the previous stack
+- the map is draggable, tappable, and stable on the final renderer
+- selected search results immediately collapse the result list
+- dropped pins can resolve to OpenCage labels when a key is configured
 
 ## Validation Checklist
 
@@ -272,11 +314,14 @@ We can call this sprint successful when:
 - duplicate-trigger suppression test
 - outer-zone passive-assist entry and cleanup test
 
-### Search Provider
+### Search And Map
 
-- Nominatim fallback still works with no BYOK configuration
-- Mapbox search works with configured key
-- Bangladesh search quality is materially better on Mapbox than on Nominatim for real queries
+- Photon search returns stable results for real destination queries
+- selected search results immediately close the list and become the active destination
+- MapLibre map gestures work normally
+- OpenFreeMap Liberty renders correctly in the setup flow
+- OpenCage labels populate dropped pins when a key is configured
+- clearing the OpenCage key returns dropped pins to fallback labels without breaking setup
 
 ## Release Theme
 

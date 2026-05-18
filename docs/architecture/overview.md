@@ -51,6 +51,29 @@ Security note:
 - local persistence is device-protected for alarm/session recovery and Android auto-backup is disabled for MVP
 - shell-driven profiling is exposed only through the dedicated `benchmark` target, not through the shipped app manifest
 
+### Location Alarm Platform
+
+Owns destination-triggered one-shot alarms without moving trigger authority into Flutter.
+
+Current implementation:
+
+- Flutter owns destination search, dropped-pin selection, radius choice, setup copy, and saved-alarm summaries
+- `LocationAlarmMap` is the renderer seam and is currently backed by MapLibre with OpenFreeMap Liberty
+- `LocationSearchRepository` is currently backed by Photon search
+- dropped-pin labels can use optional OpenCage reverse geocoding when the user configures a key in Settings
+- native Android persists location trigger state, registers geofences, handles transitions, and converts arrival into the normal ringing flow
+- native location records persist health, geofence ID, registration time, last transition time, approach state, and deferred re-arm retry metadata
+- the trigger model uses an inner arrival geofence plus an outer approach zone that can enable passive fused-location updates as a low-cost assist
+- setup detects the already-inside-radius case and stores a `waiting_for_exit` health state instead of pretending a future `ENTER` transition is guaranteed
+
+Current hardening focus:
+
+- geofence cleanup after one-shot trigger
+- bounded Play Services waits
+- boot and retry re-arm isolation
+- fail-closed health parsing
+- Android `lintRelease` readiness
+
 ### Mission Platform
 
 Owns a stable mission contract so dismissal challenges can be added without rewriting the scheduler or alarm service.

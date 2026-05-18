@@ -928,8 +928,8 @@ The location-alarm work stopped being a pure planning exercise and started cross
 The setup flow now exists as a proper search-first and map-confirmed flow rather than an idea on paper. It is intentionally provider-shaped so the product is not trapped by the first MVP choices:
 
 - Flutter uses a dedicated location-alarm feature surface
-- map rendering uses `flutter_map` and OpenStreetMap tiles for now
-- place search sits behind a repository abstraction, with Nominatim as the first implementation
+- map rendering now uses MapLibre with OpenFreeMap Liberty
+- place search still sits behind a repository abstraction, now backed by Photon, with optional OpenCage reverse geocoding for dropped-pin labels
 - the saved alarm model stores label, coordinates, radius, and health state rather than provider-specific place metadata
 
 That matters because a location alarm is not a cosmetic extension of a time alarm. It introduces background execution, provider dependencies, and state that can become unhealthy for reasons the user cannot see unless the app makes them visible.

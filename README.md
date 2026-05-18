@@ -45,13 +45,14 @@ Implemented today:
 - snooze duration and max-snooze limits
 - active ring-session recovery after process death
 - diagnostics and permission repair flows
+- location alarms powered by MapLibre rendering with OpenFreeMap Liberty, Photon search, and optional OpenCage reverse geocoding for dropped pins
 - first-run onboarding flow for exact alarms, notifications, and battery optimization
 - math mission with configurable difficulty and problem count
 - steps mission with `TYPE_STEP_DETECTOR` progress and cadence filtering
 - QR mission backed by a reusable native vision pipeline
 - quiet timer sourced from the persisted native timeout deadline
 - `MediaPlayer`-based alarm playback with a bundled direct-boot-safe fallback tone for reboot-before-unlock alarms
-- custom tone validation with MIME checks, a 15 MB import cap, and fallback-to-warning behavior when a tone source disappears
+- custom tone validation with MIME checks, provider-reported size checks, and fallback-to-warning behavior when a tone source disappears
 
 Current playback note:
 
@@ -194,6 +195,9 @@ Security and release decisions are tracked in the ADR set under [docs/adr](docs/
 - Kotlin on Android for the alarm engine
 - `AlarmManager.setAlarmClock()` for exact scheduling
 - `MediaPlayer` for controllable alarm playback and per-instance ramping
+- MapLibre with OpenFreeMap Liberty for location-alarm maps
+- Photon for place search
+- optional OpenCage reverse geocoding for dropped-pin labels
 - CameraX + ML Kit for the QR mission pipeline
 
 ## Getting Started
@@ -212,6 +216,19 @@ flutter pub get
 flutter analyze
 flutter test
 ```
+
+### Location Alarm Map Stack
+
+Location alarms now use:
+
+- MapLibre for interactive map rendering
+- OpenFreeMap Liberty for the map style
+- Photon for place search
+- optional OpenCage reverse geocoding for readable labels when you drop a pin manually
+
+OpenCage is optional and configured in-app from `Settings -> Location map stack`. If you leave it blank, dropped pins still work; they just keep the fallback label until you rename or move them.
+
+Location alarms are currently in MVP hardening. The user-facing flow exists, but the release checklist still tracks native reliability hardening for geofence cleanup, retry behavior, and Android lint release readiness.
 
 ### Run On A Device
 
@@ -282,12 +299,14 @@ GitHub Actions currently provides:
 - `Dependency Review`
   - dependency-risk / CVE review on pull requests
 - `Distribute Android Release`
-  - signed release APK and app bundle build
+  - signed universal APK, ABI split APKs, and app bundle build
   - checksum and build metadata generation
   - GitHub release publishing on `v*` tags
   - manual `workflow_dispatch` distribution for a chosen tag
 
 Release builds are not considered verified until the minified APK has been installed and smoke-tested on a real device.
+
+GitHub releases publish a universal APK for easiest sideloading plus smaller ABI split APKs for `arm64-v8a`, `armeabi-v7a`, and `x86_64`. Users who are unsure should install the universal APK; users who know their device ABI can choose the smaller split artifact.
 
 ## Distribution Workflow
 
@@ -329,7 +348,7 @@ See [docs/testing/performance-workflow.md](docs/testing/performance-workflow.md)
 
 ## Repository Map
 
-- [docs/README.md](docs/README.md): documentation index
+- [docs/Doc Index.md](docs/Doc%20Index.md): documentation index
 - [docs/architecture/overview.md](docs/architecture/overview.md): stable system model
 - [docs/architecture/engineering-story.md](docs/architecture/engineering-story.md): engineering rationale
 - [docs/architecture/active-session-lifecycle.md](docs/architecture/active-session-lifecycle.md): authoritative alarm session lifecycle

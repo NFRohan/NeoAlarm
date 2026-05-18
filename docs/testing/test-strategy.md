@@ -56,6 +56,8 @@ Cover:
 - recurrence rules
 - skip-next occurrence semantics
 - timezone and DST behavior
+- location-trigger serialization and health-state mapping
+- Photon search response parsing
 - snooze cap logic
 - mission configuration validation
 - mission problem-count validation
@@ -79,6 +81,7 @@ Cover:
 - mission activity signaling and inactivity re-trigger contract
 - quiet-timer deadline propagation from native session state into Flutter UI
 - mission-availability gating when sensors or permissions are missing
+- location-alarm setup contracts, including search selection, dropped pins, radius presets, and setup diagnostics
 
 These tests should prove that the app shell and the native core agree on state shape and lifecycle.
 
@@ -150,6 +153,13 @@ Cover:
 - release-build memory shape via `dumpsys meminfo`
 - idle CPU checks via repeated `top` samples after the dashboard settles
 - package and private-data storage checks with `adb` and Android Settings
+- location alarm creation, edit, disable, delete, and repair flows
+- location alarm geofence registration, retry state, and cleanup logs
+- already-inside-radius behavior
+- outer-zone passive-assist entry and cleanup
+- walking and bus/train-style route tests with screen off
+- poor-signal or underground expectation checks
+- MapLibre gestures, Photon search, and optional OpenCage dropped-pin labels
 
 Target at least:
 
@@ -164,6 +174,7 @@ Current validation status:
 - reboot recovery has been validated on-device
 - Doze resilience has been validated on-device
 - at least one roughly `1 hour 15 minute` long-idle exact-alarm test window on Samsung has been validated end to end, with Android confirming the alarm as both `Next alarm clock` and `Next wake from idle` before successful delivery at the expected minute
+- location alarms have a real setup and native geofence path, but current release readiness is still gated by the post-audit hardening sprint and route testing
 
 Direct-boot note:
 
@@ -248,7 +259,7 @@ The repository now includes these GitHub Actions workflows:
 - `Android CI`: on `main` and manual runs, `flutter analyze`, `flutter test`, release APK verification build, and artifact upload
 - `CodeQL`: SAST for Android code and workflow code
 - `Dependency Review`: pull-request dependency-risk review
-- `Distribute Android Release`: signed release APK and app bundle build plus GitHub release publishing on `v*` tags or manual workflow dispatch
+- `Distribute Android Release`: signed universal APK, ABI split APKs, and app bundle build plus GitHub release publishing on `v*` tags or manual workflow dispatch
 
 This does not eliminate the manual device matrix, but it does move security and artifact discipline into the default engineering loop instead of leaving them as release-week tasks.
 

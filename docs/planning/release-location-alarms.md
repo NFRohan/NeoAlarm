@@ -17,29 +17,31 @@ It is also a larger platform feature than a normal alarm option, so it needs exp
 Current implementation checkpoint:
 
 - trigger-kind, health-model, and native persistence groundwork are already landed
-- provider-agnostic search scaffolding is landed with a Nominatim-backed first implementation and a clean path for a better BYOK provider
-- the search + map-confirmation setup flow is built behind a dedicated map widget boundary
-- native geofence registration scaffolding, receiver handoff, and reboot/time-change resync hooks are in progress
+- provider-agnostic search scaffolding is landed with Photon search now sitting behind the abstraction
+- the search + map-confirmation setup flow is built behind a dedicated MapLibre widget boundary
+- native geofence registration, receiver handoff, and reboot/time-change resync hooks exist
 - setup-time diagnostics now check health and already-inside-radius state through the native layer
 - passive foreground fallback checks are wired on app resume so we are not trusting geofence delivery blindly
 - the dashboard now exposes a first-pass location-alarm entry path for real-device validation
 - device-level location readiness now lives in Settings, while the setup flow stays focused on destination selection, radius, and already-inside-radius warnings
 - the setup surface has been tightened with an inline search action and no generic seeded `Pinned location` query text
+- the trigger model now arms inner and outer geofences, using the outer zone to enable passive fused-location assistance near the destination
+- transient location-arm failures persist retry metadata and can schedule deferred native re-arm attempts
+- saved location alarms can be edited after creation for destination, radius, ringtone, volume behavior, snooze policy, and mission configuration
 
-Current refinement direction after the first exposed MVP:
+Current stable-release hardening direction after the first exposed MVP:
 
-- better per-alarm health and repair UX
-- stronger registration/retry confidence
-- hybrid geofence plus passive-approach assistance near destination
-- cleaner saved-alarm editing
-- search quality improvement through a BYOK provider strategy
+- fix the post-audit native reliability blockers before calling the feature stable
+- clear Android `lintRelease`
+- tighten geofence cleanup after trigger, disable, and delete
+- bound Play Services waits and isolate boot/retry recovery failure domains
+- complete real route testing with screen-off, reboot, and poor-signal scenarios
 
-Still intentionally pending before the feature is exposed:
+Still intentionally pending before a stable location-alarm release:
 
-- richer per-alarm repair actions outside the setup flow
-- device validation of geofence registration and transition behavior
-- retry/deferred re-registration after boot / Play services unavailability
-- fuller tone and mission editing for location alarms
+- route validation of geofence registration and transition behavior
+- post-audit hardening from `docs/planning/reliability-security-quality-hardening-sprint.md`
+- stronger privacy and provider-copy review for OpenCage reverse geocoding
 
 ## Initial Recommendation
 
@@ -102,10 +104,12 @@ Each armed location alarm should have an explicit derived health state, surfaced
 Recommended first-pass states:
 
 - `HEALTHY`
+- `REARM_PENDING`
 - `NO_FOREGROUND_PERMISSION`
 - `NO_BACKGROUND_PERMISSION`
 - `LOCATION_DISABLED`
 - `GEOFENCE_NOT_REGISTERED`
+- `WAITING_FOR_EXIT`
 - `PLAY_SERVICES_UNAVAILABLE`
 - `BATTERY_RESTRICTED`
 - `LOW_LOCATION_CONFIDENCE`
@@ -115,10 +119,12 @@ These are not all equivalent in severity.
 Recommended user-facing labels:
 
 - `Ready`
+- `Re-arm pending`
 - `Needs location access`
 - `Needs background access`
 - `Location off`
 - `Geofence not armed`
+- `Move outside radius first`
 - `Play services unavailable`
 - `Battery restriction may block triggers`
 - `Approximate location may be unreliable`
@@ -271,33 +277,22 @@ For MVP, NeoAlarm should support both:
 
 The recommended provider split is:
 
-- map UI: OpenStreetMap tiles through `flutter_map`
-- place search/geocoding: a provider abstraction with an improved BYOK implementation when configured
+- map UI: MapLibre with OpenFreeMap Liberty
+- place search: Photon through a provider abstraction
+- dropped-pin labeling: optional OpenCage reverse geocoding
 
 Current implementation:
 
-- `flutter_map` for map rendering and pin interaction
-- a `LocationSearchRepository` abstraction in Flutter
-- Nominatim as the first provider behind that abstraction for MVP
-
-Recommended next provider step:
-
-- keep `flutter_map` for now
-- add Mapbox geocoding behind the same repository abstraction
-- treat Nominatim as the no-key fallback rather than the primary long-term search experience
-
-Why this remains the right map/search split:
-
-- no Google Maps SDK billing or account setup
-- consistent with NeoAlarm's lightweight and open ethos
-- keeps provider choice swappable if search quality becomes a problem later
-- lets search quality improve without forcing an immediate map migration
+- `LocationAlarmMap` now uses MapLibre for map rendering and pin interaction
+- OpenFreeMap Liberty supplies the map style
+- `LocationSearchRepository` in Flutter now uses Photon for place search
+- OpenCage is optional and only used to turn dropped pins into readable labels
 
 Important guardrails:
 
 - the alarm model should store only label, latitude, longitude, and radius
 - the alarm model should not depend on provider-specific place IDs for MVP
-- search provider choice should stay behind an interface so we can swap Nominatim out later without rewriting the UI flow
+- search provider choice should stay behind an interface so we can swap Photon later without rewriting the UI flow
 
 ## MVP Product Shape
 
@@ -552,8 +547,8 @@ Before implementation starts, the spike should explicitly create these boundarie
 - `LocationSearchRepository`
 - search result model with label + lat/lng
 - search-first destination picker UI
-- map confirmation screen using `flutter_map`
-- radius preset UI with semantic labels
+- map confirmation screen behind a dedicated `LocationAlarmMap` boundary
+- explicit radius preset UI using `500 m`, `1000 m`, and `1500 m`
 - health-state rendering for location alarms
 
 ### Native Android prep

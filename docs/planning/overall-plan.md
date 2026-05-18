@@ -39,16 +39,25 @@ The first release should optimize for:
 - Steps mission gating and repair flow for missing `ACTIVITY_RECOGNITION`
 - Mission-specific activity enforcement so silence cannot be prolonged by meaningless taps
 
-### Early Post-MVP Feature Pack
+### Completed Post-MVP Feature Pack
+
+These practical reliability features have moved from roadmap into the current working tree:
+
+- skip-next alarm
+- timezone and travel handling through device-time or specific-timezone modes
+- gradual volume ramp
+- reusable custom tone imports and per-alarm tone selection
+- extra loud mode with conservative speaker-only boost
+- location alarms MVP with native geofencing, health states, MapLibre map rendering, Photon search, optional OpenCage pin labels, and passive approach assist
+
+### Current Post-MVP Priorities
 
 Prioritize practical reliability features before novelty features:
 
-- skip-next alarm
-- one-time override for repeating alarms
+- complete the reliability, security, and quality hardening sprint
+- validate location alarms through real route testing, reboot behavior, screen-off behavior, and poor-signal conditions
 - backup and restore via local import/export
-- timezone and travel handling
 - alarm history
-- gradual volume ramp
 - holiday/date skip rules from local config or imported calendar data
 
 ## Engineering Plan
@@ -163,3 +172,4 @@ The MVP is complete when:
 - NFC mission
 - wearable integrations
 - home-screen widgets
+- one-time override for repeating alarms

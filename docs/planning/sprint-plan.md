@@ -173,14 +173,23 @@ Turn the feature set into a trustworthy first release.
 - known device-specific limitations are documented
 - a sideload-ready release candidate can be built and tested by outside contributors
 
-## Immediate Post-MVP Backlog
+## Completed Post-MVP Expansion Since The Original Plan
 
-Treat these as the next sprint candidates after MVP, not as part of the first release:
+The original backlog below has partly become product baseline. These items are now implemented in the current working tree:
 
 - skip-next alarm
-- one-time override for repeating alarms
-- backup and restore
-- timezone/travel handling refinements
-- alarm history
+- timezone-specific alarms for travel or remote-time reminders
 - gradual volume ramp
+- custom tone import and per-alarm custom tone selection
+- extra loud mode with conservative speaker-only boost
+- location alarms MVP with MapLibre, Photon, optional OpenCage labels, native geofencing, health states, and passive approach assist
+
+## Current Post-MVP Backlog
+
+Treat these as current sprint candidates:
+
+- reliability, security, and quality hardening from [reliability-security-quality-hardening-sprint.md](reliability-security-quality-hardening-sprint.md)
+- backup and restore
+- alarm history
 - holiday/date skip rules
+- deeper location-alarm validation and polish after field testing

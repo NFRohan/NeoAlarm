@@ -7,8 +7,11 @@ This project treats documentation as part of the engineering surface, not as a c
 - Read [documentation-strategy.md](documentation-strategy.md) for the documentation contract.
 - Read [planning/overall-plan.md](planning/overall-plan.md) for the full implementation roadmap.
 - Read [planning/sprint-plan.md](planning/sprint-plan.md) for the execution sequence.
+- Read [planning/reliability-security-quality-hardening-sprint.md](planning/reliability-security-quality-hardening-sprint.md) for the current post-audit hardening sprint.
 - Read [testing/test-strategy.md](testing/test-strategy.md) for the quality and CI model.
 - Read [testing/performance-workflow.md](testing/performance-workflow.md) for Macrobenchmark, Perfetto, and dependency-audit usage.
+- Read [reviews/security-performance-code-quality-audit-2026-05-17.md](reviews/security-performance-code-quality-audit-2026-05-17.md) for the latest comprehensive post-review audit.
+- Read [releases/v1.0.4.md](releases/v1.0.4.md) for the latest detailed release notes.
 - Browse [../screenshots](../screenshots) for current app screenshots used in the repository front page and visual documentation.
 - Read [architecture/engineering-story.md](architecture/engineering-story.md) to understand why the system is shaped this way.
 - Read [architecture/overview.md](architecture/overview.md) for the high-level technical model.
@@ -29,12 +32,14 @@ This project treats documentation as part of the engineering surface, not as a c
 
 - [planning/overall-plan.md](planning/overall-plan.md)
 - [planning/sprint-plan.md](planning/sprint-plan.md)
+- [planning/reliability-security-quality-hardening-sprint.md](planning/reliability-security-quality-hardening-sprint.md)
 - [architecture/active-session-lifecycle.md](architecture/active-session-lifecycle.md)
 
 ### I want to understand testing and release confidence
 
 - [testing/test-strategy.md](testing/test-strategy.md)
 - [testing/performance-workflow.md](testing/performance-workflow.md)
+- [reviews/security-performance-code-quality-audit-2026-05-17.md](reviews/security-performance-code-quality-audit-2026-05-17.md)
 - [planning/sprint-plan.md](planning/sprint-plan.md)
 - [adr/0006-security-hardening-and-release-pipeline.md](adr/0006-security-hardening-and-release-pipeline.md)
 - [adr/0009-event-driven-active-session-and-vision-lifecycle.md](adr/0009-event-driven-active-session-and-vision-lifecycle.md)
@@ -84,6 +89,8 @@ This project treats documentation as part of the engineering surface, not as a c
 - `LICENSE`: GPLv3 project license.
 - `docs/documentation-strategy.md`: what documentation must exist and when it must be updated.
 - `docs/planning/*.md`: roadmap and sprint-level execution planning.
+- `docs/reviews/*.md`: dated audit and post-review findings that feed planning work.
+- `docs/releases/*.md`: checked-in release notes used by the GitHub release workflow when present.
 - `docs/testing/*.md`: quality strategy, CI expectations, and device-testing approach.
 - `docs/testing/performance-workflow.md`: performance benchmarking, Perfetto capture, and dependency-audit workflow.
 - `screenshots/`: current app screenshots for the README and future visual documentation.

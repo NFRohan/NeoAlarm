@@ -2,17 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:neoalarm/src/core/theme/app_theme.dart';
 import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
 import 'package:neoalarm/src/features/alarms/application/alarm_list_controller.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_location_trigger.dart';
 import 'package:neoalarm/src/features/location_alarms/application/location_alarm_setup_controller.dart';
 import 'package:neoalarm/src/features/location_alarms/application/location_alarm_setup_state.dart';
+import 'package:neoalarm/src/features/location_alarms/data/location_reverse_geocode_repository.dart';
 import 'package:neoalarm/src/features/location_alarms/data/location_search_repository.dart';
 import 'package:neoalarm/src/features/location_alarms/domain/current_location_snapshot.dart';
 import 'package:neoalarm/src/features/location_alarms/domain/location_alarm_setup_diagnostics.dart';
 import 'package:neoalarm/src/features/location_alarms/domain/location_radius_preset.dart';
 import 'package:neoalarm/src/features/location_alarms/domain/location_search_result.dart';
+import 'package:neoalarm/src/features/location_alarms/domain/location_selection_draft.dart';
 import 'package:neoalarm/src/features/location_alarms/presentation/widgets/location_alarm_map.dart';
 
 class LocationAlarmSetupScreen extends ConsumerStatefulWidget {
@@ -46,6 +49,9 @@ class _LocationAlarmSetupScreenState
   late LocationAlarmSetupState _state;
   LocationAlarmSetupDiagnostics? _diagnostics;
   bool _currentLocationInFlight = false;
+  int _searchRequestId = 0;
+  int _diagnosticsRequestId = 0;
+  int _reverseGeocodeRequestId = 0;
 
   @override
   void initState() {
@@ -130,6 +136,7 @@ class _LocationAlarmSetupScreenState
                     isSearching: _state.isSearching,
                     onChanged: (value) {
                       setState(() {
+                        _searchRequestId++;
                         _state = _controller.updateQuery(_state, value);
                       });
                     },
@@ -155,10 +162,13 @@ class _LocationAlarmSetupScreenState
                       selectedLabel: selected?.label,
                       onSelected: (result) {
                         setState(() {
+                          _searchRequestId++;
+                          _reverseGeocodeRequestId++;
                           _state = _controller.selectSearchResult(
                             _state,
                             result,
                           );
+                          _queryController.text = _state.query;
                         });
                         unawaited(_refreshDiagnostics());
                       },
@@ -175,19 +185,26 @@ class _LocationAlarmSetupScreenState
                     isCenteringOnCurrentLocation: _currentLocationInFlight,
                     onTap: (point) {
                       setState(() {
+                        _searchRequestId++;
                         _state = _controller.pinLocation(
                           _state,
                           latitude: point.latitude,
                           longitude: point.longitude,
                         );
                       });
+                      unawaited(
+                        _refreshPinnedSelectionLabel(
+                          latitude: point.latitude,
+                          longitude: point.longitude,
+                        ),
+                      );
                       unawaited(_refreshDiagnostics());
                     },
                     onCenterOnCurrentLocation: _centerMapOnCurrentLocation,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Map data | OpenStreetMap contributors',
+                    'Map data: OpenFreeMap, OpenMapTiles, OpenStreetMap',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: NeoColors.subtext,
                     ),
@@ -313,12 +330,16 @@ class _LocationAlarmSetupScreenState
   }
 
   Future<void> _runSearch() async {
+    final requestId = ++_searchRequestId;
+    final searchState = _controller.setSearching(_state);
     setState(() {
-      _state = _controller.setSearching(_state);
+      _state = searchState;
     });
 
-    final nextState = await _controller.search(_state);
-    if (!mounted) {
+    final nextState = await _controller.search(searchState);
+    if (!mounted ||
+        requestId != _searchRequestId ||
+        _state.query.trim() != searchState.query.trim()) {
       return;
     }
 
@@ -328,6 +349,7 @@ class _LocationAlarmSetupScreenState
   }
 
   Future<void> _refreshDiagnostics() async {
+    final requestId = ++_diagnosticsRequestId;
     final draftTrigger = _state.draftTrigger;
     if (draftTrigger == null) {
       if (!mounted) {
@@ -339,10 +361,19 @@ class _LocationAlarmSetupScreenState
       return;
     }
 
-    final diagnostics = await ref
-        .read(alarmRepositoryProvider)
-        .evaluateLocationTrigger(draftTrigger);
-    if (!mounted) {
+    LocationAlarmSetupDiagnostics? diagnostics;
+    try {
+      diagnostics = await ref
+          .read(alarmRepositoryProvider)
+          .evaluateLocationTrigger(draftTrigger);
+    } on PlatformException {
+      diagnostics = null;
+    } catch (_) {
+      diagnostics = null;
+    }
+    if (!mounted ||
+        requestId != _diagnosticsRequestId ||
+        !_matchesDraftTrigger(draftTrigger, _state.draftTrigger)) {
       return;
     }
 
@@ -412,6 +443,62 @@ class _LocationAlarmSetupScreenState
       return;
     }
     Navigator.of(context).pop(_state.draftTrigger);
+  }
+
+  Future<void> _refreshPinnedSelectionLabel({
+    required double latitude,
+    required double longitude,
+  }) async {
+    final requestId = ++_reverseGeocodeRequestId;
+    try {
+      final label = await ref
+          .read(locationReverseGeocodeRepositoryProvider)
+          .reverseGeocode(latitude: latitude, longitude: longitude);
+      if (!mounted ||
+          requestId != _reverseGeocodeRequestId ||
+          label == null ||
+          !_isCurrentPinnedSelection(
+            latitude: latitude,
+            longitude: longitude,
+          )) {
+        return;
+      }
+
+      setState(() {
+        _state = _controller.updateSelectionLabel(_state, label);
+      });
+    } on LocationReverseGeocodeException {
+      // Keep the fallback pin label when reverse geocoding is unavailable.
+    } on PlatformException {
+      // Keep the fallback pin label when the provider channel fails.
+    } catch (_) {
+      // Keep setup usable even if reverse geocoding fails unexpectedly.
+    }
+  }
+
+  bool _matchesDraftTrigger(
+    AlarmLocationTrigger expected,
+    AlarmLocationTrigger? current,
+  ) {
+    return current != null &&
+        expected.radiusMeters == current.radiusMeters &&
+        _sameCoordinate(expected.latitude, current.latitude) &&
+        _sameCoordinate(expected.longitude, current.longitude);
+  }
+
+  bool _isCurrentPinnedSelection({
+    required double latitude,
+    required double longitude,
+  }) {
+    final selection = _state.selection;
+    return selection != null &&
+        selection.source == LocationSelectionSource.pinned &&
+        _sameCoordinate(selection.latitude, latitude) &&
+        _sameCoordinate(selection.longitude, longitude);
+  }
+
+  bool _sameCoordinate(double left, double right) {
+    return (left - right).abs() < 0.000001;
   }
 }
 

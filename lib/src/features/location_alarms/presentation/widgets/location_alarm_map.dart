@@ -1,6 +1,7 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:neoalarm/src/core/theme/app_theme.dart';
 import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
 import 'package:neoalarm/src/features/location_alarms/domain/location_selection_draft.dart';
@@ -17,6 +18,13 @@ class LocationAlarmMap extends StatefulWidget {
     super.key,
   });
 
+  static const openFreeMapStyleUrl =
+      'https://tiles.openfreemap.org/styles/liberty';
+
+  static final mapGestureRecognizers = <Factory<OneSequenceGestureRecognizer>>{
+    Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+  };
+
   final double centerLatitude;
   final double centerLongitude;
   final double zoom;
@@ -30,81 +38,122 @@ class LocationAlarmMap extends StatefulWidget {
 }
 
 class _LocationAlarmMapState extends State<LocationAlarmMap> {
-  late final MapController _mapController;
-
-  @override
-  void initState() {
-    super.initState();
-    _mapController = MapController();
-  }
+  MapLibreMapController? _mapController;
+  bool _styleLoaded = false;
 
   @override
   void didUpdateWidget(covariant LocationAlarmMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.centerLatitude != widget.centerLatitude ||
-        oldWidget.centerLongitude != widget.centerLongitude ||
-        oldWidget.zoom != widget.zoom) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
 
-        _mapController.move(
-          LatLng(widget.centerLatitude, widget.centerLongitude),
-          widget.zoom,
-        );
-      });
+    if (_mapController != null &&
+        (oldWidget.centerLatitude != widget.centerLatitude ||
+            oldWidget.centerLongitude != widget.centerLongitude ||
+            oldWidget.zoom != widget.zoom)) {
+      _moveCamera();
+    }
+
+    if (_styleLoaded && oldWidget.selection != widget.selection) {
+      _syncSelectionMarker();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final selection = widget.selection;
+    return _MapShell(
+      selection: widget.selection,
+      isCenteringOnCurrentLocation: widget.isCenteringOnCurrentLocation,
+      onCenterOnCurrentLocation: widget.onCenterOnCurrentLocation,
+      child: MapLibreMap(
+        styleString: LocationAlarmMap.openFreeMapStyleUrl,
+        initialCameraPosition: CameraPosition(
+          target: LatLng(widget.centerLatitude, widget.centerLongitude),
+          zoom: widget.zoom,
+        ),
+        gestureRecognizers: LocationAlarmMap.mapGestureRecognizers,
+        onMapCreated: _handleMapCreated,
+        onStyleLoadedCallback: _handleStyleLoaded,
+        onMapClick: (_, latLng) => widget.onTap(latLng),
+        compassEnabled: false,
+        rotateGesturesEnabled: false,
+        tiltGesturesEnabled: false,
+        myLocationEnabled: false,
+      ),
+    );
+  }
 
+  void _handleMapCreated(MapLibreMapController controller) {
+    _mapController = controller;
+  }
+
+  Future<void> _handleStyleLoaded() async {
+    _styleLoaded = true;
+    await _moveCamera();
+    await _syncSelectionMarker();
+  }
+
+  Future<void> _moveCamera() async {
+    final controller = _mapController;
+    if (controller == null) {
+      return;
+    }
+
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(widget.centerLatitude, widget.centerLongitude),
+          zoom: widget.zoom,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _syncSelectionMarker() async {
+    final controller = _mapController;
+    if (controller == null || !_styleLoaded) {
+      return;
+    }
+
+    await controller.clearCircles();
+
+    final selection = widget.selection;
+    if (selection == null) {
+      return;
+    }
+
+    await controller.addCircle(
+      CircleOptions(
+        geometry: LatLng(selection.latitude, selection.longitude),
+        circleColor: '#F59E0B',
+        circleRadius: 8,
+        circleOpacity: 0.95,
+        circleStrokeColor: '#111111',
+        circleStrokeWidth: 3,
+      ),
+    );
+  }
+}
+
+class _MapShell extends StatelessWidget {
+  const _MapShell({
+    required this.child,
+    required this.selection,
+    required this.isCenteringOnCurrentLocation,
+    required this.onCenterOnCurrentLocation,
+  });
+
+  final Widget child;
+  final LocationSelectionDraft? selection;
+  final bool isCenteringOnCurrentLocation;
+  final VoidCallback onCenterOnCurrentLocation;
+
+  @override
+  Widget build(BuildContext context) {
     return NeoPanel(
       padding: EdgeInsets.zero,
       child: ClipRect(
         child: Stack(
           children: [
-            SizedBox(
-              height: 280,
-              child: FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: LatLng(
-                    widget.centerLatitude,
-                    widget.centerLongitude,
-                  ),
-                  initialZoom: widget.zoom,
-                  onTap: (_, point) => widget.onTap(point),
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'dev.neoalarm.app',
-                  ),
-                  if (selection != null)
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: LatLng(
-                            selection.latitude,
-                            selection.longitude,
-                          ),
-                          width: 56,
-                          height: 56,
-                          child: const Icon(
-                            Icons.location_on,
-                            size: 44,
-                            color: NeoColors.orange,
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ),
+            SizedBox(height: 280, child: child),
             Positioned(
               left: 12,
               right: 12,
@@ -134,9 +183,9 @@ class _LocationAlarmMapState extends State<LocationAlarmMap> {
                   color: Colors.transparent,
                   child: InkWell(
                     key: const Key('location_alarm_map_center_button'),
-                    onTap: widget.isCenteringOnCurrentLocation
+                    onTap: isCenteringOnCurrentLocation
                         ? null
-                        : widget.onCenterOnCurrentLocation,
+                        : onCenterOnCurrentLocation,
                     customBorder: const CircleBorder(),
                     child: Ink(
                       width: 48,
@@ -154,7 +203,7 @@ class _LocationAlarmMapState extends State<LocationAlarmMap> {
                         ],
                       ),
                       child: Center(
-                        child: widget.isCenteringOnCurrentLocation
+                        child: isCenteringOnCurrentLocation
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,

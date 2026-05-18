@@ -3,11 +3,13 @@ import 'package:neoalarm/src/core/ui/neo_brutal_widgets.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_engine_status.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:neoalarm/src/features/settings/application/location_provider_settings_controller.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
     required this.status,
     required this.themeMode,
+    required this.locationProviderSettings,
     required this.onBack,
     required this.onSetDarkModeEnabled,
     required this.onRequestExactAlarmAccess,
@@ -19,11 +21,14 @@ class SettingsScreen extends StatelessWidget {
     required this.onRequestCameraPermission,
     required this.onRequestActivityRecognitionPermission,
     required this.onRunOnboarding,
+    required this.onSaveOpenCageApiKey,
+    required this.onClearOpenCageApiKey,
     super.key,
   });
 
   final AsyncValue<AlarmEngineStatus> status;
   final AsyncValue<ThemeMode> themeMode;
+  final AsyncValue<LocationProviderSettings> locationProviderSettings;
   final VoidCallback onBack;
   final ValueChanged<bool> onSetDarkModeEnabled;
   final VoidCallback onRequestExactAlarmAccess;
@@ -35,6 +40,8 @@ class SettingsScreen extends StatelessWidget {
   final VoidCallback onRequestCameraPermission;
   final VoidCallback onRequestActivityRecognitionPermission;
   final Future<void> Function() onRunOnboarding;
+  final Future<void> Function(String token) onSaveOpenCageApiKey;
+  final Future<void> Function() onClearOpenCageApiKey;
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +109,12 @@ class SettingsScreen extends StatelessWidget {
           _AppearanceSection(
             themeMode: themeMode,
             onSetDarkModeEnabled: onSetDarkModeEnabled,
+          ),
+          const SizedBox(height: 18),
+          _LocationProviderSection(
+            settings: locationProviderSettings,
+            onSaveOpenCageApiKey: onSaveOpenCageApiKey,
+            onClearOpenCageApiKey: onClearOpenCageApiKey,
           ),
           const SizedBox(height: 18),
           _SetupFlowSection(onRunOnboarding: onRunOnboarding),
@@ -247,6 +260,233 @@ class _AppearanceSection extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _LocationProviderSection extends ConsumerStatefulWidget {
+  const _LocationProviderSection({
+    required this.settings,
+    required this.onSaveOpenCageApiKey,
+    required this.onClearOpenCageApiKey,
+  });
+
+  final AsyncValue<LocationProviderSettings> settings;
+  final Future<void> Function(String token) onSaveOpenCageApiKey;
+  final Future<void> Function() onClearOpenCageApiKey;
+
+  @override
+  ConsumerState<_LocationProviderSection> createState() =>
+      _LocationProviderSectionState();
+}
+
+class _LocationProviderSectionState
+    extends ConsumerState<_LocationProviderSection> {
+  late final TextEditingController _tokenController;
+  bool _saveInFlight = false;
+  bool _showApiKey = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tokenController = TextEditingController();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LocationProviderSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextToken = widget.settings.asData?.value.openCageApiKey;
+    final previousToken = oldWidget.settings.asData?.value.openCageApiKey;
+    if (nextToken != null &&
+        nextToken != previousToken &&
+        !_saveInFlight &&
+        nextToken != _tokenController.text) {
+      _tokenController.text = nextToken;
+    }
+  }
+
+  @override
+  void dispose() {
+    _tokenController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final configuredToken = widget.settings.asData?.value.openCageApiKey ?? '';
+    final hasToken = configuredToken.trim().isNotEmpty;
+
+    if (!_saveInFlight &&
+        widget.settings.hasValue &&
+        _tokenController.text != configuredToken) {
+      _tokenController.text = configuredToken;
+    }
+
+    return NeoPanel(
+      color: NeoColors.panel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: NeoColors.cyan,
+                  border: Border.all(color: NeoColors.ink, width: 2),
+                ),
+                child: const Icon(
+                  Icons.map,
+                  size: 24,
+                  color: NeoColors.accentInk,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Location map stack',
+                      style: theme.textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      hasToken
+                          ? 'Photon search and MapLibre rendering are active. Reverse-geocode labels are enabled for manually dropped pins.'
+                          : 'Photon search and MapLibre rendering are active. Add a reverse-geocode key only if you want readable labels for dropped pins.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: NeoColors.subtext,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              NeoPill(
+                label: hasToken ? 'Reverse labels on' : 'Photon only',
+                backgroundColor: hasToken ? NeoColors.success : NeoColors.muted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          NeoPanel(
+            color: NeoColors.cyan.withValues(alpha: 0.22),
+            borderWidth: 2,
+            shadowOffset: const Offset(2, 2),
+            child: Text(
+              'Search uses Photon. The map uses MapLibre with OpenFreeMap Liberty. Reverse geocoding is optional and only runs when a dropped pin needs a readable label.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: NeoColors.accentInk,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _tokenController,
+            autocorrect: false,
+            enableSuggestions: false,
+            obscureText: !_showApiKey,
+            keyboardType: TextInputType.visiblePassword,
+            decoration: InputDecoration(
+              hintText: 'Paste your reverse-geocode API key',
+              prefixIcon: const Icon(Icons.key),
+              suffixIcon: IconButton(
+                tooltip: _showApiKey
+                    ? 'Hide reverse-geocode key'
+                    : 'Show reverse-geocode key',
+                icon: Icon(
+                  _showApiKey ? Icons.visibility_off : Icons.visibility,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _showApiKey = !_showApiKey;
+                  });
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'OpenCage currently provides reverse geocoding. NeoAlarm keeps the key on-device, but dropped-pin coordinates are sent to OpenCage to fetch a readable place label.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: NeoColors.subtext,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: NeoActionButton(
+                  label: _saveInFlight ? 'Saving...' : 'Save token',
+                  backgroundColor: NeoColors.primary,
+                  onPressed: _saveInFlight ? null : _handleSave,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: NeoActionButton(
+                  label: 'Clear token',
+                  backgroundColor: hasToken ? NeoColors.panel : NeoColors.muted,
+                  onPressed: _saveInFlight || !hasToken ? null : _handleClear,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleSave() async {
+    setState(() {
+      _saveInFlight = true;
+    });
+
+    try {
+      await widget.onSaveOpenCageApiKey(_tokenController.text);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Reverse-geocode key updated.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saveInFlight = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleClear() async {
+    setState(() {
+      _saveInFlight = true;
+    });
+
+    try {
+      await widget.onClearOpenCageApiKey();
+      if (!mounted) {
+        return;
+      }
+      _tokenController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Reverse-geocode key cleared. Dropped pins will keep fallback labels.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saveInFlight = false;
+        });
+      }
+    }
   }
 }
 

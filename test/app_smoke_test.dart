@@ -175,14 +175,56 @@ void main() {
     expect(find.text('TIME ALARM'), findsOneWidget);
     expect(find.text('LOCATION ALARM'), findsOneWidget);
   });
+
+  testWidgets('prompts to repair unhealthy enabled location alarms', (
+    tester,
+  ) async {
+    final repository = _FakeAlarmRepository(
+      alarms: [
+        _buildLocationAlarm(health: AlarmLocationHealth.noForegroundPermission),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [alarmRepositoryProvider.overrideWithValue(repository)],
+        child: const AlarmApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Location alarm needs attention'), findsOneWidget);
+    expect(find.text('Grant location access'), findsOneWidget);
+
+    await tester.tap(find.text('Grant location access'));
+    await tester.pumpAndSettle();
+
+    expect(repository.foregroundLocationPermissionRequests, 1);
+  });
+}
+
+AlarmSpec _buildLocationAlarm({required AlarmLocationHealth health}) {
+  return AlarmSpec.createLocationDraft(
+    timezoneId: 'UTC',
+    locationTrigger: AlarmLocationTrigger(
+      label: 'Airport stop',
+      latitude: 23.8516,
+      longitude: 90.3978,
+      radiusMeters: 1000,
+      health: health,
+    ),
+  );
 }
 
 class _FakeAlarmRepository implements AlarmRepository {
   _FakeAlarmRepository({
     this.startupContext = const AppStartupContext(userUnlocked: true),
+    this.alarms = const [],
   });
 
   final AppStartupContext startupContext;
+  final List<AlarmSpec> alarms;
+  int foregroundLocationPermissionRequests = 0;
 
   @override
   Future<void> deleteAlarm(String id) async {}
@@ -249,7 +291,9 @@ class _FakeAlarmRepository implements AlarmRepository {
   Future<void> requestCameraPermission() async {}
 
   @override
-  Future<void> requestForegroundLocationPermission() async {}
+  Future<void> requestForegroundLocationPermission() async {
+    foregroundLocationPermissionRequests += 1;
+  }
 
   @override
   Future<void> requestExactAlarmPermission() async {}
@@ -277,9 +321,7 @@ class _FakeAlarmRepository implements AlarmRepository {
   Future<void> runLocationAlarmForegroundCheck() async {}
 
   @override
-  Future<List<AlarmSpec>> listAlarms() async {
-    return const [];
-  }
+  Future<List<AlarmSpec>> listAlarms() async => alarms;
 
   @override
   Future<void> rescheduleAll() async {}
@@ -303,9 +345,8 @@ class _FakeAlarmRepository implements AlarmRepository {
   }
 
   @override
-  Future<AlarmSpec> refreshLocationAlarm(String id) async {
-    throw UnimplementedError();
-  }
+  Future<AlarmSpec> refreshLocationAlarm(String id) async =>
+      alarms.firstWhere((alarm) => alarm.id == id);
 
   @override
   Future<void> refreshLocationAlarms() async {}

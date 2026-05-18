@@ -28,7 +28,8 @@ void main() {
 
     final trigger = state.draftTrigger;
 
-    expect(state.searchResults, hasLength(1));
+    expect(state.searchResults, isEmpty);
+    expect(state.query, 'Banani Station');
     expect(trigger, isNotNull);
     expect(trigger?.label, 'Banani Station');
     expect(trigger?.radiusMeters, 1500);
@@ -72,6 +73,54 @@ void main() {
     expect(state.radiusPreset, LocationRadiusPreset.near);
     expect(state.mapCenterLatitude, closeTo(23.7337, 0.0001));
     expect(state.mapCenterLongitude, closeTo(90.4176, 0.0001));
+  });
+
+  test('selection label updates without disturbing pinned coordinates', () {
+    final controller = LocationAlarmSetupController(
+      search: _FakeLocationSearchRepository(results: const []),
+    );
+
+    var state = controller.createInitialState();
+    state = controller.pinLocation(
+      state,
+      latitude: 23.8103,
+      longitude: 90.4125,
+    );
+    state = controller.updateSelectionLabel(
+      state,
+      'Dhaka University, Dhaka, Bangladesh',
+    );
+
+    final trigger = state.draftTrigger;
+
+    expect(trigger?.label, 'Dhaka University, Dhaka, Bangladesh');
+    expect(trigger?.latitude, closeTo(23.8103, 0.0001));
+    expect(trigger?.longitude, closeTo(90.4125, 0.0001));
+  });
+
+  test('query edits clear stale search results and spinner state', () async {
+    final controller = LocationAlarmSetupController(
+      search: _FakeLocationSearchRepository(
+        results: const [
+          LocationSearchResult(
+            label: 'Banani Station',
+            latitude: 23.7937,
+            longitude: 90.4066,
+          ),
+        ],
+      ),
+    );
+
+    var state = controller.createInitialState();
+    state = controller.updateQuery(state, 'Banani');
+    state = controller.setSearching(state);
+    state = await controller.search(state);
+    state = controller.setSearching(state);
+    state = controller.updateQuery(state, 'Gulshan');
+
+    expect(state.isSearching, isFalse);
+    expect(state.searchResults, isEmpty);
+    expect(state.query, 'Gulshan');
   });
 }
 

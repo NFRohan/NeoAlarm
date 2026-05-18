@@ -16,6 +16,8 @@ enum AlarmTriggerKind {
 
 enum AlarmLocationHealth {
   healthy('healthy', 'Ready'),
+  unknown('unknown', 'Readiness unknown'),
+  rearmPending('rearm_pending', 'Re-arm pending'),
   noForegroundPermission('no_foreground_permission', 'Needs location access'),
   noBackgroundPermission('no_background_permission', 'Needs background access'),
   locationDisabled('location_disabled', 'Location off'),
@@ -40,6 +42,8 @@ enum AlarmLocationHealth {
   final String label;
 
   String? get repairActionLabel => switch (this) {
+    AlarmLocationHealth.unknown => 'Recheck readiness',
+    AlarmLocationHealth.rearmPending => null,
     AlarmLocationHealth.noForegroundPermission => 'Grant location access',
     AlarmLocationHealth.noBackgroundPermission => 'Grant background access',
     AlarmLocationHealth.locationDisabled => 'Turn location on',
@@ -54,7 +58,7 @@ enum AlarmLocationHealth {
   static AlarmLocationHealth fromId(String? value) {
     return AlarmLocationHealth.values.firstWhere(
       (health) => health.id == value,
-      orElse: () => AlarmLocationHealth.healthy,
+      orElse: () => AlarmLocationHealth.unknown,
     );
   }
 }

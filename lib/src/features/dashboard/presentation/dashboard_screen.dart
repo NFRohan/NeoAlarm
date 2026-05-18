@@ -13,6 +13,7 @@ import 'package:neoalarm/src/features/alarms/presentation/alarm_editor_sheet.dar
 import 'package:neoalarm/src/features/dashboard/presentation/widgets/dashboard_widgets.dart';
 import 'package:neoalarm/src/features/location_alarms/presentation/location_alarm_setup_screen.dart';
 import 'package:neoalarm/src/features/onboarding/application/onboarding_controller.dart';
+import 'package:neoalarm/src/features/settings/application/location_provider_settings_controller.dart';
 import 'package:neoalarm/src/features/settings/application/theme_mode_controller.dart';
 import 'package:neoalarm/src/features/settings/presentation/settings_screen.dart';
 
@@ -27,15 +28,15 @@ class DashboardScreen extends ConsumerStatefulWidget {
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends ConsumerState<DashboardScreen>
-    with WidgetsBindingObserver {
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   _DashboardTab _selectedTab = _DashboardTab.alarms;
   Timer? _countdownTicker;
+  String? _lastPromptedLocationRepairKey;
+  bool _locationRepairPromptShowing = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _countdownTicker = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) {
         setState(() {});
@@ -46,16 +47,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   void dispose() {
     _countdownTicker?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      ref.invalidate(alarmEngineStatusProvider);
-      unawaited(_refreshAlarmStateOnResume(ref));
-    }
   }
 
   @override
@@ -63,7 +55,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final alarms = ref.watch(alarmListControllerProvider);
     final engineStatus = ref.watch(alarmEngineStatusProvider);
     final themeMode = ref.watch(appThemeModeControllerProvider);
+    final locationProviderSettings = ref.watch(
+      locationProviderSettingsControllerProvider,
+    );
     final showAddAlarm = _selectedTab == _DashboardTab.alarms;
+    final alarmValues = alarms.asData?.value;
+    if (alarmValues != null) {
+      _maybeScheduleLocationRepairPrompt(context, ref, alarmValues);
+    }
 
     return PopScope<Object?>(
       canPop: _selectedTab == _DashboardTab.alarms,
@@ -99,7 +98,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                   alarms: alarms,
                   engineStatus: engineStatus,
                   nextAlarmCountdownText: nextAlarmCountdownText(
-                    alarms.asData?.value ?? const [],
+                    alarmValues ?? const [],
                   ),
                   onRequestExactAlarmPermission: () {
                     _requestExactAlarmPermission(context);
@@ -132,6 +131,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                   key: const ValueKey('settings-tab'),
                   status: engineStatus,
                   themeMode: themeMode,
+                  locationProviderSettings: locationProviderSettings,
                   onBack: () {
                     setState(() {
                       _selectedTab = _DashboardTab.alarms;
@@ -169,6 +169,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                         .read(onboardingControllerProvider.notifier)
                         .resetOnboarding();
                   },
+                  onSaveOpenCageApiKey: (token) => ref
+                      .read(locationProviderSettingsControllerProvider.notifier)
+                      .setOpenCageApiKey(token),
+                  onClearOpenCageApiKey: () => ref
+                      .read(locationProviderSettingsControllerProvider.notifier)
+                      .clearOpenCageApiKey(),
                 ),
         ),
       ),
@@ -315,6 +321,145 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
+  void _maybeScheduleLocationRepairPrompt(
+    BuildContext context,
+    WidgetRef ref,
+    List<AlarmSpec> alarms,
+  ) {
+    if (_selectedTab != _DashboardTab.alarms) {
+      return;
+    }
+
+    final alarm = _firstPromptableLocationAlarm(alarms);
+    if (alarm == null) {
+      _lastPromptedLocationRepairKey = null;
+      return;
+    }
+
+    final health = alarm.locationTrigger!.health;
+    final promptKey = '${alarm.id}:${health.id}';
+    if (_locationRepairPromptShowing ||
+        _lastPromptedLocationRepairKey == promptKey) {
+      return;
+    }
+
+    _lastPromptedLocationRepairKey = promptKey;
+    _locationRepairPromptShowing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _selectedTab != _DashboardTab.alarms) {
+        _locationRepairPromptShowing = false;
+        return;
+      }
+
+      await _showLocationRepairPrompt(context, ref, alarm);
+      if (mounted) {
+        _locationRepairPromptShowing = false;
+      }
+    });
+  }
+
+  AlarmSpec? _firstPromptableLocationAlarm(List<AlarmSpec> alarms) {
+    for (final alarm in alarms) {
+      if (!alarm.enabled || !alarm.isLocationAlarm) {
+        continue;
+      }
+
+      final health = alarm.locationTrigger?.health;
+      if (health != null && _shouldPromptForLocationHealth(health)) {
+        return alarm;
+      }
+    }
+
+    return null;
+  }
+
+  bool _shouldPromptForLocationHealth(AlarmLocationHealth health) {
+    return switch (health) {
+      AlarmLocationHealth.unknown ||
+      AlarmLocationHealth.noForegroundPermission ||
+      AlarmLocationHealth.noBackgroundPermission ||
+      AlarmLocationHealth.locationDisabled ||
+      AlarmLocationHealth.geofenceNotRegistered ||
+      AlarmLocationHealth.batteryRestricted => true,
+      AlarmLocationHealth.healthy ||
+      AlarmLocationHealth.rearmPending ||
+      AlarmLocationHealth.waitingForExit ||
+      AlarmLocationHealth.playServicesUnavailable ||
+      AlarmLocationHealth.lowLocationConfidence => false,
+    };
+  }
+
+  Future<void> _showLocationRepairPrompt(
+    BuildContext context,
+    WidgetRef ref,
+    AlarmSpec alarm,
+  ) async {
+    final locationTrigger = alarm.locationTrigger;
+    if (locationTrigger == null) {
+      return;
+    }
+
+    final health = locationTrigger.health;
+    final actionLabel = health.repairActionLabel;
+    if (actionLabel == null) {
+      return;
+    }
+
+    final alarmLabel = alarm.label.trim().isEmpty
+        ? 'This location alarm'
+        : alarm.label.trim();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Location alarm needs attention'),
+          content: Text(
+            '$alarmLabel may not trigger right now: ${health.label}.\n\n'
+            '${_locationRepairPromptDetail(health)}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(actionLabel),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != true || !context.mounted) {
+      return;
+    }
+
+    await _repairLocationAlarm(context, ref, alarm);
+  }
+
+  String _locationRepairPromptDetail(AlarmLocationHealth health) {
+    return switch (health) {
+      AlarmLocationHealth.unknown =>
+        'NeoAlarm could not verify this alarm state. Recheck readiness before relying on it.',
+      AlarmLocationHealth.noForegroundPermission =>
+        'Android location permission was revoked, so NeoAlarm cannot evaluate your position.',
+      AlarmLocationHealth.noBackgroundPermission =>
+        'Background location access is missing, so Android may not deliver travel triggers while NeoAlarm is closed.',
+      AlarmLocationHealth.locationDisabled =>
+        'Location services are off, so Android cannot tell when you reach the destination.',
+      AlarmLocationHealth.geofenceNotRegistered =>
+        'The destination geofence is not armed. Retry arming before relying on this alarm.',
+      AlarmLocationHealth.batteryRestricted =>
+        'Battery restrictions can delay location callbacks on this device.',
+      AlarmLocationHealth.healthy ||
+      AlarmLocationHealth.rearmPending ||
+      AlarmLocationHealth.waitingForExit ||
+      AlarmLocationHealth.playServicesUnavailable ||
+      AlarmLocationHealth.lowLocationConfidence => '',
+    };
+  }
+
   Future<void> _repairLocationAlarm(
     BuildContext context,
     WidgetRef ref,
@@ -326,6 +471,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     }
 
     switch (health) {
+      case AlarmLocationHealth.unknown:
+        await _runRepositoryAction(
+          context,
+          () => ref
+              .read(alarmListControllerProvider.notifier)
+              .refreshLocationAlarm(alarm.id),
+        );
+        return;
+      case AlarmLocationHealth.rearmPending:
+        return;
       case AlarmLocationHealth.noForegroundPermission:
         await _runRepositoryAction(
           context,
@@ -403,16 +558,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.message ?? error.code)));
-    }
-  }
-
-  Future<void> _refreshAlarmStateOnResume(WidgetRef ref) async {
-    try {
-      await ref
-          .read(alarmListControllerProvider.notifier)
-          .refreshLocationAlarms();
-    } on PlatformException {
-      ref.invalidate(alarmListControllerProvider);
     }
   }
 

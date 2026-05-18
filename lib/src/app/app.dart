@@ -37,6 +37,11 @@ class _AlarmAppShell extends ConsumerStatefulWidget {
 
 class _AlarmAppShellState extends ConsumerState<_AlarmAppShell>
     with WidgetsBindingObserver {
+  static const _foregroundLocationCheckDebounce = Duration(seconds: 30);
+
+  DateTime? _lastForegroundLocationCheckAt;
+  bool _foregroundLocationCheckInFlight = false;
+
   @override
   void initState() {
     super.initState();
@@ -52,12 +57,32 @@ class _AlarmAppShellState extends ConsumerState<_AlarmAppShell>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(
-        ref.read(alarmRepositoryProvider).runLocationAlarmForegroundCheck(),
-      );
+      _runForegroundLocationCheckIfNeeded();
       ref.invalidate(appStartupContextProvider);
+      ref.invalidate(alarmEngineStatusProvider);
       ref.invalidate(alarmListControllerProvider);
     }
+  }
+
+  void _runForegroundLocationCheckIfNeeded() {
+    final now = DateTime.now();
+    final lastRunAt = _lastForegroundLocationCheckAt;
+    if (_foregroundLocationCheckInFlight ||
+        (lastRunAt != null &&
+            now.difference(lastRunAt) < _foregroundLocationCheckDebounce)) {
+      return;
+    }
+
+    _lastForegroundLocationCheckAt = now;
+    _foregroundLocationCheckInFlight = true;
+    unawaited(
+      ref
+          .read(alarmRepositoryProvider)
+          .runLocationAlarmForegroundCheck()
+          .whenComplete(() {
+            _foregroundLocationCheckInFlight = false;
+          }),
+    );
   }
 
   @override

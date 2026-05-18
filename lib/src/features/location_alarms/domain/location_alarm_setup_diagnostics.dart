@@ -44,6 +44,10 @@ class LocationAlarmSetupDiagnostics {
     return switch (health) {
       AlarmLocationHealth.healthy =>
         'Foreground checks look healthy for this destination.',
+      AlarmLocationHealth.unknown =>
+        'NeoAlarm could not verify this destination alarm state. Recheck readiness before trusting it.',
+      AlarmLocationHealth.rearmPending =>
+        'NeoAlarm is waiting to retry geofence arming after a transient system failure.',
       AlarmLocationHealth.noForegroundPermission =>
         'Foreground location access is still missing.',
       AlarmLocationHealth.noBackgroundPermission =>

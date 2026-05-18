@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -98,6 +100,49 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('location setup ignores stale search results after query edits', (
+    tester,
+  ) async {
+    final searchRepository = _CompleterLocationSearchRepository();
+    final repository = _FakeAlarmRepository(
+      diagnostics: const LocationAlarmSetupDiagnostics(
+        health: AlarmLocationHealth.healthy,
+        alreadyInsideRadius: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          alarmRepositoryProvider.overrideWithValue(repository),
+          locationSearchRepositoryProvider.overrideWithValue(searchRepository),
+        ],
+        child: const MaterialApp(home: LocationAlarmSetupScreen()),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'Banani');
+    await tester.tap(find.byIcon(Icons.search));
+    await tester.pump();
+
+    expect(searchRepository.queries, ['Banani']);
+
+    await tester.enterText(find.byType(TextField), 'Gulshan');
+    await tester.pump();
+
+    searchRepository.completeNext(const [
+      LocationSearchResult(
+        label: 'Banani Station',
+        latitude: 23.7937,
+        longitude: 90.4066,
+      ),
+    ]);
+    await tester.pump();
+
+    expect(find.text('SEARCH RESULTS'), findsNothing);
+    expect(find.text('Banani Station'), findsNothing);
   });
 }
 
@@ -252,4 +297,21 @@ class _FakeLocationSearchRepository implements LocationSearchRepository {
 
   @override
   Future<List<LocationSearchResult>> search(String query) async => const [];
+}
+
+class _CompleterLocationSearchRepository implements LocationSearchRepository {
+  final queries = <String>[];
+  final _completers = <Completer<List<LocationSearchResult>>>[];
+
+  @override
+  Future<List<LocationSearchResult>> search(String query) {
+    queries.add(query);
+    final completer = Completer<List<LocationSearchResult>>();
+    _completers.add(completer);
+    return completer.future;
+  }
+
+  void completeNext(List<LocationSearchResult> results) {
+    _completers.removeAt(0).complete(results);
+  }
 }

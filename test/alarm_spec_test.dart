@@ -1,6 +1,7 @@
 import 'package:neoalarm/src/features/alarms/domain/alarm_spec.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_location_trigger.dart';
 import 'package:neoalarm/src/features/alarms/domain/alarm_mission.dart';
+import 'package:neoalarm/src/features/location_alarms/domain/location_alarm_setup_diagnostics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -226,5 +227,31 @@ void main() {
       roundTrip.locationTrigger?.lastTransitionAtUtc,
       DateTime.utc(2026, 3, 24, 12, 30),
     );
+  });
+
+  test('unknown location health ids fail closed', () {
+    final trigger = AlarmLocationTrigger.fromMap(const {
+      'label': 'Future station',
+      'latitude': 23.7937,
+      'longitude': 90.4066,
+      'radiusMeters': 1000,
+      'health': 'future_native_health',
+    });
+    final diagnostics = LocationAlarmSetupDiagnostics.fromMap(const {
+      'health': 'future_native_health',
+      'alreadyInsideRadius': false,
+    });
+
+    expect(
+      AlarmLocationHealth.fromId('future_native_health'),
+      AlarmLocationHealth.unknown,
+    );
+    expect(trigger.health, AlarmLocationHealth.unknown);
+    expect(trigger.isHealthy, isFalse);
+    expect(trigger.repairActionLabel, 'Recheck readiness');
+    expect(diagnostics.health, AlarmLocationHealth.unknown);
+    expect(diagnostics.isBlocking, isTrue);
+    expect(diagnostics.headline, 'READINESS UNKNOWN');
+    expect(diagnostics.detail, contains('could not verify'));
   });
 }

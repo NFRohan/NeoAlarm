@@ -2,6 +2,8 @@ package dev.neoalarm.app.alarmengine
 
 enum class LocationAlarmHealth(val id: String) {
     HEALTHY("healthy"),
+    UNKNOWN("unknown"),
+    REARM_PENDING("rearm_pending"),
     NO_FOREGROUND_PERMISSION("no_foreground_permission"),
     NO_BACKGROUND_PERMISSION("no_background_permission"),
     LOCATION_DISABLED("location_disabled"),
@@ -13,7 +15,7 @@ enum class LocationAlarmHealth(val id: String) {
 
     companion object {
         fun fromId(value: String?): LocationAlarmHealth {
-            return entries.firstOrNull { it.id == value } ?: HEALTHY
+            return entries.firstOrNull { it.id == value } ?: UNKNOWN
         }
     }
 }

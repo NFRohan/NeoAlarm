@@ -14,6 +14,8 @@ data class LocationAlarmRecord(
     val lastTransitionAtEpochMillis: Long? = null,
     val approachState: LocationAlarmApproachState = LocationAlarmApproachState.IDLE,
     val approachEnteredAtEpochMillis: Long? = null,
+    val rearmRetryCount: Int = 0,
+    val nextRearmRetryAtEpochMillis: Long? = null,
 ) {
     fun toChannelMap(): Map<String, Any?> {
         return mapOf(
@@ -27,6 +29,8 @@ data class LocationAlarmRecord(
             "lastTransitionAtUtc" to lastTransitionAtEpochMillis?.let(Instant::ofEpochMilli)?.toString(),
             "approachState" to approachState.id,
             "approachEnteredAtUtc" to approachEnteredAtEpochMillis?.let(Instant::ofEpochMilli)?.toString(),
+            "rearmRetryCount" to rearmRetryCount,
+            "nextRearmRetryAtUtc" to nextRearmRetryAtEpochMillis?.let(Instant::ofEpochMilli)?.toString(),
         )
     }
 
@@ -42,6 +46,8 @@ data class LocationAlarmRecord(
             put("lastTransitionAtEpochMillis", lastTransitionAtEpochMillis)
             put("approachState", approachState.id)
             put("approachEnteredAtEpochMillis", approachEnteredAtEpochMillis)
+            put("rearmRetryCount", rearmRetryCount)
+            put("nextRearmRetryAtEpochMillis", nextRearmRetryAtEpochMillis)
         }
     }
 
@@ -64,6 +70,11 @@ data class LocationAlarmRecord(
                 },
                 approachState = LocationAlarmApproachState.fromId(raw["approachState"] as? String),
                 approachEnteredAtEpochMillis = when (val rawValue = raw["approachEnteredAtUtc"]) {
+                    is String -> Instant.parse(rawValue).toEpochMilli()
+                    else -> null
+                },
+                rearmRetryCount = (raw["rearmRetryCount"] as? Number)?.toInt() ?: 0,
+                nextRearmRetryAtEpochMillis = when (val rawValue = raw["nextRearmRetryAtUtc"]) {
                     is String -> Instant.parse(rawValue).toEpochMilli()
                     else -> null
                 },
@@ -95,18 +106,28 @@ data class LocationAlarmRecord(
             } else {
                 null
             }
+            val nextRearmRetryAtEpochMillis = if (
+                json.has("nextRearmRetryAtEpochMillis") &&
+                !json.isNull("nextRearmRetryAtEpochMillis")
+            ) {
+                json.getLong("nextRearmRetryAtEpochMillis")
+            } else {
+                null
+            }
 
             return LocationAlarmRecord(
                 label = json.optString("label", "Destination"),
                 latitude = json.getDouble("latitude"),
                 longitude = json.getDouble("longitude"),
                 radiusMeters = json.getInt("radiusMeters"),
-                health = LocationAlarmHealth.fromId(json.optString("health", LocationAlarmHealth.HEALTHY.id)),
+                health = LocationAlarmHealth.fromId(json.optString("health", LocationAlarmHealth.UNKNOWN.id)),
                 geofenceId = json.optString("geofenceId").takeUnless { it.isBlank() },
                 registeredAtEpochMillis = registeredAtEpochMillis,
                 lastTransitionAtEpochMillis = lastTransitionAtEpochMillis,
                 approachState = LocationAlarmApproachState.fromId(json.optString("approachState")),
                 approachEnteredAtEpochMillis = approachEnteredAtEpochMillis,
+                rearmRetryCount = json.optInt("rearmRetryCount", 0),
+                nextRearmRetryAtEpochMillis = nextRearmRetryAtEpochMillis,
             )
         }
     }

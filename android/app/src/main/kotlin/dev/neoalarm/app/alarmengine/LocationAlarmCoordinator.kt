@@ -1,27 +1,11 @@
 package dev.neoalarm.app.alarmengine
 
-import android.Manifest
-import android.location.Location
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.location.LocationManager
-import android.os.Build
-import android.os.PowerManager
+import android.location.Location
 import android.util.Log
-import androidx.core.content.ContextCompat
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.Geofence
-import com.google.android.gms.location.GeofencingRequest
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
-import com.google.android.gms.tasks.Tasks
+import com.google.android.gms.location.GeofenceStatusCodes
 
 class LocationAlarmCoordinator(
     context: Context,
@@ -29,27 +13,36 @@ class LocationAlarmCoordinator(
 ) {
     private val logTag = "NeoAlarmLocation"
     private val appContext = context.applicationContext
-    private val geofencingClient = LocationServices.getGeofencingClient(appContext)
-    private val fusedLocationClient: FusedLocationProviderClient =
-        LocationServices.getFusedLocationProviderClient(appContext)
-    private val googleApiAvailability = GoogleApiAvailability.getInstance()
-    private val locationManager = appContext.getSystemService(LocationManager::class.java)
-    private val powerManager = appContext.getSystemService(PowerManager::class.java)
+    private val scheduler = AlarmScheduler(appContext, store)
+    private val readinessProbe = LocationReadinessProbe(appContext)
+    private val geofenceRegistrar = LocationGeofenceRegistrar(appContext)
+    private val approachMonitor = LocationApproachMonitor(appContext, store, readinessProbe)
+    private val rearmScheduler = LocationRearmScheduler(appContext, store)
 
-    fun sync(record: AlarmRecord): AlarmRecord {
+    fun sync(record: AlarmRecord, force: Boolean = false): AlarmRecord {
         if (record.triggerKind != AlarmTriggerKind.LOCATION || record.locationTrigger == null) {
+            return record
+        }
+
+        if (!force &&
+            record.locationTrigger.health == LocationAlarmHealth.REARM_PENDING &&
+            record.locationTrigger.nextRearmRetryAtEpochMillis != null &&
+            System.currentTimeMillis() < record.locationTrigger.nextRearmRetryAtEpochMillis
+        ) {
+            rearmScheduler.sync()
             return record
         }
 
         if (!record.enabled) {
             Log.i(logTag, "Skipping geofence arm for disabled location alarm ${record.id}.")
-            unregisterGeofence(record)
+            geofenceRegistrar.unregister(record)
             val persisted = persist(
                 record.copy(
-                    locationTrigger = clearRegistration(record.locationTrigger),
+                    locationTrigger = clearLocationAlarmRegistration(record.locationTrigger),
                 ),
             )
-            syncPassiveApproachMonitoring()
+            approachMonitor.sync()
+            rearmScheduler.sync()
             return persisted
         }
 
@@ -59,54 +52,36 @@ class LocationAlarmCoordinator(
                 logTag,
                 "Cannot arm location alarm ${record.id}: " +
                     "health=${blockingHealth.id}, " +
-                    "foregroundGranted=${isForegroundLocationGranted()}, " +
-                    "backgroundGranted=${isBackgroundLocationGranted()}, " +
-                    "locationEnabled=${locationManager?.isLocationEnabled ?: false}, " +
-                    "playServices=${googleApiAvailability.isGooglePlayServicesAvailable(appContext)}",
+                    "foregroundGranted=${readinessProbe.isForegroundLocationGranted()}, " +
+                    "backgroundGranted=${readinessProbe.isBackgroundLocationGranted()}, " +
+                    "locationEnabled=${readinessProbe.isLocationEnabled()}, " +
+                    "playServices=${readinessProbe.playServicesStatus()}",
             )
-            unregisterGeofence(record)
-            val persisted = persist(
-                record.copy(
-                    locationTrigger = clearRegistration(record.locationTrigger).copy(
-                        health = blockingHealth,
+            geofenceRegistrar.unregister(record)
+            val persisted = if (shouldAutoRetryBlockingHealth(blockingHealth)) {
+                persist(
+                    record.copy(
+                        locationTrigger = buildPendingRearmTrigger(
+                            record.locationTrigger,
+                        ),
                     ),
-                ),
-            )
-            syncPassiveApproachMonitoring()
+                )
+            } else {
+                persist(
+                    record.copy(
+                        locationTrigger = clearLocationAlarmRegistration(record.locationTrigger).copy(
+                            health = blockingHealth,
+                        ),
+                    ),
+                )
+            }
+            approachMonitor.sync()
+            rearmScheduler.sync()
             return persisted
         }
 
-        val geofenceId = geofenceIdFor(record.id)
-        val innerGeofence = Geofence.Builder()
-            .setRequestId(geofenceId)
-            .setCircularRegion(
-                record.locationTrigger.latitude,
-                record.locationTrigger.longitude,
-                record.locationTrigger.radiusMeters.toFloat(),
-            )
-            .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
-            .setExpirationDuration(Geofence.NEVER_EXPIRE)
-            .build()
-        val outerGeofence = Geofence.Builder()
-            .setRequestId(outerGeofenceIdFor(record.id))
-            .setCircularRegion(
-                record.locationTrigger.latitude,
-                record.locationTrigger.longitude,
-                outerRadiusMetersFor(record.locationTrigger).toFloat(),
-            )
-            .setTransitionTypes(
-                Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT,
-            )
-            .setExpirationDuration(Geofence.NEVER_EXPIRE)
-            .build()
-
-        val request = GeofencingRequest.Builder()
-            .setInitialTrigger(0)
-            .addGeofence(innerGeofence)
-            .addGeofence(outerGeofence)
-            .build()
-
-        val currentLocation = currentLocationSnapshot()
+        val geofenceId = LocationAlarmConfig.geofenceIdFor(record.id)
+        val currentLocation = readinessProbe.currentLocationSnapshot()
         val distanceMeters = currentLocation?.distanceToLocationTrigger(record.locationTrigger)
         val healthAfterArm = if (
             distanceMeters != null &&
@@ -114,12 +89,12 @@ class LocationAlarmCoordinator(
         ) {
             LocationAlarmHealth.WAITING_FOR_EXIT
         } else {
-            deriveWarningHealth()
+            readinessProbe.warningHealth()
         }
         val approachStateAfterArm = when {
             distanceMeters != null &&
                 distanceMeters > record.locationTrigger.radiusMeters &&
-                distanceMeters <= outerRadiusMetersFor(record.locationTrigger) -> {
+                distanceMeters <= LocationAlarmConfig.outerRadiusMetersFor(record.locationTrigger) -> {
                 LocationAlarmApproachState.APPROACHING
             }
 
@@ -133,16 +108,39 @@ class LocationAlarmCoordinator(
             }
         }
 
+        if (!force && geofenceRegistrar.isCurrentRegistrationReusable(record, geofenceId)) {
+            Log.i(logTag, "Location alarm ${record.id} already armed; refreshing health only.")
+            val persisted = persist(
+                record.copy(
+                    locationTrigger = record.locationTrigger.copy(
+                        health = healthAfterArm,
+                        geofenceId = geofenceId,
+                        approachState = approachStateAfterArm,
+                        approachEnteredAtEpochMillis = if (
+                            approachStateAfterArm == LocationAlarmApproachState.APPROACHING
+                        ) {
+                            record.locationTrigger.approachEnteredAtEpochMillis ?: System.currentTimeMillis()
+                        } else {
+                            null
+                        },
+                        rearmRetryCount = 0,
+                        nextRearmRetryAtEpochMillis = null,
+                    ),
+                ),
+            )
+            approachMonitor.sync()
+            rearmScheduler.sync()
+            return persisted
+        }
+
         return try {
             Log.i(
                 logTag,
-                "Arming location alarm ${record.id} " +
-                    "lat=${record.locationTrigger.latitude}, " +
-                    "lng=${record.locationTrigger.longitude}, " +
+                    "Arming location alarm ${record.id} " +
                     "radius=${record.locationTrigger.radiusMeters}",
             )
-            unregisterGeofence(record)
-            Tasks.await(geofencingClient.addGeofences(request, geofencePendingIntent()))
+            geofenceRegistrar.unregister(record)
+            geofenceRegistrar.register(record)
             Log.i(logTag, "Location alarm ${record.id} armed with geofenceId=$geofenceId.")
             val persisted = persist(
                 record.copy(
@@ -158,10 +156,13 @@ class LocationAlarmCoordinator(
                         } else {
                             null
                         },
+                        rearmRetryCount = 0,
+                        nextRearmRetryAtEpochMillis = null,
                     ),
                 ),
             )
-            syncPassiveApproachMonitoring()
+            approachMonitor.sync()
+            rearmScheduler.sync()
             persisted
         } catch (error: Exception) {
             val apiCode = (error as? ApiException)?.statusCode
@@ -172,14 +173,25 @@ class LocationAlarmCoordinator(
                     "message=${error.message}",
                 error,
             )
-            val persisted = persist(
-                record.copy(
-                    locationTrigger = clearRegistration(record.locationTrigger).copy(
-                        health = LocationAlarmHealth.GEOFENCE_NOT_REGISTERED,
+            val persisted = if (shouldAutoRetryApiCode(apiCode)) {
+                persist(
+                    record.copy(
+                        locationTrigger = buildPendingRearmTrigger(
+                            record.locationTrigger,
+                        ),
                     ),
-                ),
-            )
-            syncPassiveApproachMonitoring()
+                )
+            } else {
+                persist(
+                    record.copy(
+                        locationTrigger = clearLocationAlarmRegistration(record.locationTrigger).copy(
+                            health = LocationAlarmHealth.GEOFENCE_NOT_REGISTERED,
+                        ),
+                    ),
+                )
+            }
+            approachMonitor.sync()
+            rearmScheduler.sync()
             persisted
         }
     }
@@ -195,10 +207,11 @@ class LocationAlarmCoordinator(
     fun delete(id: String) {
         val current = store.get(id) ?: return
         if (current.triggerKind == AlarmTriggerKind.LOCATION) {
-            unregisterGeofence(current)
+            geofenceRegistrar.unregister(current)
         }
-        AlarmScheduler(appContext, store).delete(id)
-        syncPassiveApproachMonitoring()
+        scheduler.delete(id)
+        approachMonitor.sync()
+        rearmScheduler.sync()
     }
 
     fun evaluateDraft(trigger: LocationAlarmRecord): Map<String, Any?> {
@@ -211,19 +224,21 @@ class LocationAlarmCoordinator(
             )
         }
 
-        val currentLocation = currentLocationSnapshot(allowActiveRequest = false)
+        val currentLocation = readinessProbe.currentLocationSnapshot(allowActiveRequest = false)
         val distanceMeters = currentLocation?.distanceToLocationTrigger(trigger)?.toInt()
         val alreadyInsideRadius = distanceMeters != null && distanceMeters <= trigger.radiusMeters
 
         return mapOf(
-            "health" to deriveWarningHealth().id,
+            "health" to readinessProbe.warningHealth().id,
             "alreadyInsideRadius" to alreadyInsideRadius,
             "distanceMeters" to distanceMeters,
         )
     }
 
     fun currentLocationSnapshotMap(): Map<String, Any?>? {
-        val location = currentLocationSnapshot(requireBackgroundPermission = false) ?: return null
+        val location = readinessProbe.currentLocationSnapshot(
+            requireBackgroundPermission = false,
+        ) ?: return null
         return mapOf(
             "latitude" to location.latitude,
             "longitude" to location.longitude,
@@ -232,7 +247,9 @@ class LocationAlarmCoordinator(
     }
 
     fun runForegroundFallbackCheck(): List<String> {
-        val currentLocation = currentLocationSnapshot(allowActiveRequest = false) ?: return emptyList()
+        val currentLocation = readinessProbe.currentLocationSnapshot(
+            allowActiveRequest = false,
+        ) ?: return emptyList()
         val now = System.currentTimeMillis()
 
         return buildList {
@@ -251,12 +268,12 @@ class LocationAlarmCoordinator(
                 val distanceMeters = currentLocation
                     .distanceToLocationTrigger(record.locationTrigger)
                     .toInt()
-                val outerRadiusMeters = outerRadiusMetersFor(record.locationTrigger)
+                val outerRadiusMeters = LocationAlarmConfig.outerRadiusMetersFor(record.locationTrigger)
                 if (distanceMeters > record.locationTrigger.radiusMeters) {
                     if (record.locationTrigger.health == LocationAlarmHealth.WAITING_FOR_EXIT) {
                         val updated = record.copy(
                             locationTrigger = record.locationTrigger.copy(
-                                health = deriveWarningHealth(),
+                                health = readinessProbe.warningHealth(),
                             ),
                         )
                         store.upsert(updated)
@@ -300,23 +317,27 @@ class LocationAlarmCoordinator(
 
         val lastTransitionAt = current.locationTrigger.lastTransitionAtEpochMillis
         if (lastTransitionAt != null &&
-            triggeredAtMillis - lastTransitionAt < DUPLICATE_TRIGGER_COOLDOWN_MS
+            triggeredAtMillis - lastTransitionAt < LocationAlarmConfig.DUPLICATE_TRIGGER_COOLDOWN_MS
         ) {
             return false
         }
 
         val updated = current.copy(
-            locationTrigger = current.locationTrigger.copy(
+            locationTrigger = clearLocationAlarmRegistration(current.locationTrigger).copy(
                 health = LocationAlarmHealth.HEALTHY,
                 lastTransitionAtEpochMillis = triggeredAtMillis,
                 approachState = LocationAlarmApproachState.IDLE,
                 approachEnteredAtEpochMillis = null,
+                rearmRetryCount = 0,
+                nextRearmRetryAtEpochMillis = null,
             ),
         )
         store.upsert(updated)
-        syncPassiveApproachMonitoring()
+        geofenceRegistrar.unregister(current)
+        approachMonitor.sync()
+        rearmScheduler.sync()
 
-        val triggered = AlarmScheduler(appContext, store).handleAlarmTriggered(alarmId) ?: return false
+        val triggered = scheduler.handleAlarmTriggered(alarmId) ?: return false
         Log.i(logTag, "Location transition triggered alarm $alarmId.")
         AlarmRingingService.start(appContext, triggered.id)
         return true
@@ -335,7 +356,7 @@ class LocationAlarmCoordinator(
             return
         }
         if (trigger.approachState == LocationAlarmApproachState.APPROACHING) {
-            syncPassiveApproachMonitoring()
+            approachMonitor.sync()
             return
         }
 
@@ -347,14 +368,14 @@ class LocationAlarmCoordinator(
                 ),
             ),
         )
-        syncPassiveApproachMonitoring()
+        approachMonitor.sync()
     }
 
     fun handleApproachZoneExited(alarmId: String) {
         val current = store.get(alarmId) ?: return
         val trigger = current.locationTrigger ?: return
         if (trigger.approachState != LocationAlarmApproachState.APPROACHING) {
-            syncPassiveApproachMonitoring()
+            approachMonitor.sync()
             return
         }
 
@@ -366,7 +387,7 @@ class LocationAlarmCoordinator(
                 ),
             ),
         )
-        syncPassiveApproachMonitoring()
+        approachMonitor.sync()
     }
 
     fun handlePassiveLocationUpdate(
@@ -374,7 +395,7 @@ class LocationAlarmCoordinator(
         now: Long = System.currentTimeMillis(),
     ) {
         if (deriveBlockingHealth() != null) {
-            syncPassiveApproachMonitoring()
+            approachMonitor.sync()
             return
         }
 
@@ -401,15 +422,42 @@ class LocationAlarmCoordinator(
                 return@forEach
             }
 
-            if (distanceMeters > outerRadiusMetersFor(trigger)) {
+            if (distanceMeters > LocationAlarmConfig.outerRadiusMetersFor(trigger)) {
                 handleApproachZoneExited(record.id)
                 approachStateChanged = true
             }
         }
 
         if (!approachStateChanged) {
-            syncPassiveApproachMonitoring()
+            approachMonitor.sync()
         }
+    }
+
+    fun handleGeofenceDeliveryError(apiCode: Int?) {
+        Log.w(
+            logTag,
+            "Geofence delivery error apiCode=${apiCode ?: "n/a"}; marking armed alarms for repair.",
+        )
+        val now = System.currentTimeMillis()
+        store.getAll().forEach { record ->
+            if (record.triggerKind != AlarmTriggerKind.LOCATION ||
+                !record.enabled ||
+                record.locationTrigger == null
+            ) {
+                return@forEach
+            }
+
+            val nextTrigger = if (shouldAutoRetryApiCode(apiCode)) {
+                buildPendingRearmTrigger(record.locationTrigger, now)
+            } else {
+                clearLocationAlarmRegistration(record.locationTrigger).copy(
+                    health = LocationAlarmHealth.GEOFENCE_NOT_REGISTERED,
+                )
+            }
+            store.upsert(record.copy(locationTrigger = nextTrigger))
+        }
+        approachMonitor.sync()
+        rearmScheduler.sync()
     }
 
     private fun persist(record: AlarmRecord): AlarmRecord {
@@ -417,201 +465,56 @@ class LocationAlarmCoordinator(
         return record
     }
 
-    private fun clearRegistration(trigger: LocationAlarmRecord): LocationAlarmRecord {
+    private fun deriveBlockingHealth(): LocationAlarmHealth? {
+        return readinessProbe.blockingHealth(requireBackgroundPermission = true)
+    }
+
+    private fun buildPendingRearmTrigger(
+        trigger: LocationAlarmRecord,
+        now: Long = System.currentTimeMillis(),
+    ): LocationAlarmRecord {
+        val nextRetryCount = trigger.rearmRetryCount + 1
         return trigger.copy(
             geofenceId = null,
             registeredAtEpochMillis = null,
             approachState = LocationAlarmApproachState.IDLE,
             approachEnteredAtEpochMillis = null,
+            health = LocationAlarmHealth.REARM_PENDING,
+            rearmRetryCount = nextRetryCount,
+            nextRearmRetryAtEpochMillis = now + LocationAlarmConfig.retryDelayMillisFor(
+                nextRetryCount,
+            ),
         )
     }
 
-    private fun unregisterGeofence(record: AlarmRecord) {
-        val geofenceIds = listOf(
-            record.locationTrigger?.geofenceId ?: geofenceIdFor(record.id),
-            outerGeofenceIdFor(record.id),
-        )
-        runCatching {
-            Tasks.await(geofencingClient.removeGeofences(geofenceIds))
-        }
-        syncPassiveApproachMonitoring()
-    }
-
-    private fun deriveBlockingHealth(): LocationAlarmHealth? {
-        return deriveLocationLookupBlockingHealth(requireBackgroundPermission = true)
-    }
-
-    private fun deriveLocationLookupBlockingHealth(
-        requireBackgroundPermission: Boolean,
-    ): LocationAlarmHealth? {
-        if (!isForegroundLocationGranted()) {
-            return LocationAlarmHealth.NO_FOREGROUND_PERMISSION
-        }
-        if (requireBackgroundPermission && !isBackgroundLocationGranted()) {
-            return LocationAlarmHealth.NO_BACKGROUND_PERMISSION
-        }
-        if (!(locationManager?.isLocationEnabled ?: false)) {
-            return LocationAlarmHealth.LOCATION_DISABLED
-        }
-        if (googleApiAvailability.isGooglePlayServicesAvailable(appContext) !=
-            ConnectionResult.SUCCESS
-        ) {
-            return LocationAlarmHealth.PLAY_SERVICES_UNAVAILABLE
-        }
-
-        return null
-    }
-
-    private fun deriveWarningHealth(): LocationAlarmHealth {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-            !powerManager.isIgnoringBatteryOptimizations(appContext.packageName)
-        ) {
-            LocationAlarmHealth.BATTERY_RESTRICTED
-        } else {
-            LocationAlarmHealth.HEALTHY
+    private fun shouldAutoRetryBlockingHealth(health: LocationAlarmHealth): Boolean {
+        return when (health) {
+            LocationAlarmHealth.PLAY_SERVICES_UNAVAILABLE -> true
+            LocationAlarmHealth.HEALTHY,
+            LocationAlarmHealth.UNKNOWN,
+            LocationAlarmHealth.REARM_PENDING,
+            LocationAlarmHealth.NO_FOREGROUND_PERMISSION,
+            LocationAlarmHealth.NO_BACKGROUND_PERMISSION,
+            LocationAlarmHealth.LOCATION_DISABLED,
+            LocationAlarmHealth.GEOFENCE_NOT_REGISTERED,
+            LocationAlarmHealth.WAITING_FOR_EXIT,
+            LocationAlarmHealth.BATTERY_RESTRICTED,
+            LocationAlarmHealth.LOW_LOCATION_CONFIDENCE,
+            -> false
         }
     }
 
-    private fun isForegroundLocationGranted(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            appContext,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED
-    }
+    private fun shouldAutoRetryApiCode(apiCode: Int?): Boolean {
+        return when (apiCode) {
+            null -> true
+            GeofenceStatusCodes.GEOFENCE_NOT_AVAILABLE,
+            CommonStatusCodes.API_NOT_CONNECTED,
+            CommonStatusCodes.NETWORK_ERROR,
+            CommonStatusCodes.INTERNAL_ERROR,
+            -> true
 
-    private fun isBackgroundLocationGranted(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(
-                appContext,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            isForegroundLocationGranted()
+            else -> false
         }
     }
 
-    private fun geofencePendingIntent(): PendingIntent {
-        val intent = Intent()
-            .setClass(appContext, LocationAlarmReceiver::class.java)
-            .setPackage(appContext.packageName)
-        val flags = PendingIntent.FLAG_CANCEL_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                PendingIntent.FLAG_MUTABLE
-            } else {
-                0
-            }
-
-        return PendingIntent.getBroadcast(
-            appContext,
-            LOCATION_GEOFENCE_PENDING_INTENT_REQUEST_CODE,
-            intent,
-            flags,
-        )
-    }
-
-    private fun passiveLocationPendingIntent(): PendingIntent {
-        val intent = Intent(LocationAlarmReceiver.ACTION_PASSIVE_LOCATION_UPDATE)
-            .setClass(appContext, LocationAlarmReceiver::class.java)
-            .setPackage(appContext.packageName)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                PendingIntent.FLAG_MUTABLE
-            } else {
-                0
-            }
-
-        return PendingIntent.getBroadcast(
-            appContext,
-            LOCATION_PASSIVE_UPDATES_PENDING_INTENT_REQUEST_CODE,
-            intent,
-            flags,
-        )
-    }
-
-    private fun syncPassiveApproachMonitoring() {
-        val hasApproachingAlarms = store.getAll().any { record ->
-            record.triggerKind == AlarmTriggerKind.LOCATION &&
-                record.enabled &&
-                record.locationTrigger?.approachState == LocationAlarmApproachState.APPROACHING
-        }
-
-        val pendingIntent = passiveLocationPendingIntent()
-        if (!hasApproachingAlarms) {
-            runCatching {
-                fusedLocationClient.removeLocationUpdates(pendingIntent)
-            }
-            return
-        }
-
-        if (deriveLocationLookupBlockingHealth(requireBackgroundPermission = true) != null) {
-            return
-        }
-
-        val request = LocationRequest.Builder(
-            Priority.PRIORITY_PASSIVE,
-            PASSIVE_LOCATION_UPDATE_INTERVAL_MS,
-        )
-            .setMinUpdateIntervalMillis(PASSIVE_LOCATION_UPDATE_INTERVAL_MS)
-            .build()
-
-        runCatching {
-            Tasks.await(fusedLocationClient.requestLocationUpdates(request, pendingIntent))
-        }.onFailure { error ->
-            Log.w(logTag, "Unable to register passive approach listener: ${error.message}", error)
-        }
-    }
-
-    companion object {
-        private const val LOCATION_GEOFENCE_PENDING_INTENT_REQUEST_CODE = 42042
-        private const val LOCATION_PASSIVE_UPDATES_PENDING_INTENT_REQUEST_CODE = 42043
-        private const val DUPLICATE_TRIGGER_COOLDOWN_MS = 60_000L
-        private const val OUTER_RADIUS_MULTIPLIER = 3
-        private const val PASSIVE_LOCATION_UPDATE_INTERVAL_MS = 30_000L
-        const val innerGeofenceIdPrefix = "location_alarm:"
-        const val outerGeofenceIdPrefix = "location_alarm_outer:"
-
-        fun geofenceIdFor(alarmId: String): String = "${innerGeofenceIdPrefix}$alarmId"
-
-        fun outerGeofenceIdFor(alarmId: String): String = "${outerGeofenceIdPrefix}$alarmId"
-
-        fun outerRadiusMetersFor(trigger: LocationAlarmRecord): Int {
-            return trigger.radiusMeters * OUTER_RADIUS_MULTIPLIER
-        }
-    }
-
-    private fun currentLocationSnapshot(
-        requireBackgroundPermission: Boolean = true,
-        allowActiveRequest: Boolean = true,
-    ): Location? {
-        if (deriveLocationLookupBlockingHealth(requireBackgroundPermission) != null) {
-            return null
-        }
-
-        val lastLocation = runCatching {
-            Tasks.await(fusedLocationClient.lastLocation)
-        }.getOrNull()
-
-        if (lastLocation != null || !allowActiveRequest) {
-            return lastLocation
-        }
-
-        return runCatching {
-            val tokenSource = CancellationTokenSource()
-            Tasks.await(
-                fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                    tokenSource.token,
-                ),
-            )
-        }.getOrNull()
-    }
-
-    private fun Location.distanceToLocationTrigger(trigger: LocationAlarmRecord): Float {
-        val target = Location("location_alarm_target").apply {
-            latitude = trigger.latitude
-            longitude = trigger.longitude
-        }
-
-        return distanceTo(target)
-    }
 }
